@@ -170,7 +170,11 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
     }
 
     @postConstruct()
-    protected async init(): Promise<void> {
+    protected init(): void {
+        this.doInit();
+    }
+
+    protected async doInit(): Promise<void> {
         await this.fileNavigatorPreferences.ready;
         this.shell.onDidChangeCurrentWidget(() => this.onCurrentWidgetChangedHandler());
 
@@ -523,13 +527,13 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         toolbarRegistry.registerItem({
             id: FileNavigatorCommands.NEW_FILE_TOOLBAR.id,
             command: FileNavigatorCommands.NEW_FILE_TOOLBAR.id,
-            tooltip: nls.localizeByDefault('New File'),
+            tooltip: nls.localizeByDefault('New File...'),
             priority: 0,
         });
         toolbarRegistry.registerItem({
             id: FileNavigatorCommands.NEW_FOLDER_TOOLBAR.id,
             command: FileNavigatorCommands.NEW_FOLDER_TOOLBAR.id,
-            tooltip: nls.localizeByDefault('New Folder'),
+            tooltip: nls.localizeByDefault('New Folder...'),
             priority: 1,
         });
         toolbarRegistry.registerItem({

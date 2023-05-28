@@ -36,7 +36,7 @@ export class GitCommitDetailHeaderWidget extends ReactWidget {
     ) {
         super();
         this.id = 'commit-header' + commitDetailOptions.commitSha;
-        this.title.label = commitDetailOptions.commitSha.substr(0, 8);
+        this.title.label = commitDetailOptions.commitSha.substring(0, 8);
         this.options = {
             range: {
                 fromRevision: commitDetailOptions.commitSha + '~1',
@@ -48,7 +48,11 @@ export class GitCommitDetailHeaderWidget extends ReactWidget {
     }
 
     @postConstruct()
-    protected async init(): Promise<void> {
+    protected init(): void {
+        this.doInit();
+    }
+
+    protected async doInit(): Promise<void> {
         this.authorAvatar = await this.avatarService.getAvatar(this.commitDetailOptions.authorEmail);
     }
 
