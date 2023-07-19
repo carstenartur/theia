@@ -11,7 +11,7 @@
  * with the GNU Classpath Exception which is available at
  * https://www.gnu.org/software/classpath/license.html.
  *
- * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+ * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
  ********************************************************************************/
 
 import { isOSX, isWindows, nls } from '@theia/core';
@@ -234,8 +234,8 @@ export const editorGeneratedPreferenceProperties: PreferenceSchema['properties']
         ],
         "default": "smart",
         "markdownEnumDescriptions": [
-            nls.localizeByDefault("Uses the default diffing algorithm."),
-            nls.localizeByDefault("Uses an experimental diffing algorithm.")
+            nls.localizeByDefault("Uses the legacy diffing algorithm."),
+            nls.localizeByDefault("Uses the advanced diffing algorithm.")
         ],
         "scope": "language-overridable",
         "restricted": false

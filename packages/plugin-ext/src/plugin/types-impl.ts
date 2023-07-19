@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 // copied from https://github.com/microsoft/vscode/blob/1.37.0/src/vs/workbench/api/common/extHostTypes.ts
 /*---------------------------------------------------------------------------------------------
@@ -2049,6 +2049,12 @@ export enum TerminalLocation {
     Panel = 1,
     Editor = 2
 }
+
+export enum TerminalOutputAnchor {
+    Top = 0,
+    Bottom = 1
+}
+
 export class TerminalProfile {
     /**
      * Creates a new terminal profile.

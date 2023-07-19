@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
@@ -33,7 +33,7 @@ import { RPCProtocol, RPCProtocolImpl } from '../../common/rpc-protocol';
 import {
     Disposable, DisposableCollection, Emitter, isCancelled,
     ILogger, ContributionProvider, CommandRegistry, WillExecuteCommandEvent,
-    CancellationTokenSource, JsonRpcProxy, ProgressService, nls
+    CancellationTokenSource, RpcProxy, ProgressService, nls
 } from '@theia/core';
 import { PreferenceServiceImpl, PreferenceProviderProvider } from '@theia/core/lib/browser/preferences';
 import { WorkspaceService } from '@theia/workspace/lib/browser';
@@ -87,7 +87,7 @@ export class HostedPluginSupport {
     protected readonly logger: ILogger;
 
     @inject(HostedPluginServer)
-    protected readonly server: JsonRpcProxy<HostedPluginServer>;
+    protected readonly server: RpcProxy<HostedPluginServer>;
 
     @inject(HostedPluginWatcher)
     protected readonly watcher: HostedPluginWatcher;

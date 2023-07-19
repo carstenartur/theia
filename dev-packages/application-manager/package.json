@@ -1,11 +1,11 @@
 {
   "name": "@theia/application-manager",
-  "version": "1.38.0",
+  "version": "1.39.0",
   "description": "Theia application manager API.",
   "publishConfig": {
     "access": "public"
   },
-  "license": "EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0",
+  "license": "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/eclipse-theia/theia.git"
@@ -33,8 +33,9 @@
     "@babel/plugin-transform-classes": "^7.10.0",
     "@babel/plugin-transform-runtime": "^7.10.0",
     "@babel/preset-env": "^7.10.0",
-    "@theia/application-package": "1.38.0",
-    "@theia/ffmpeg": "1.38.0",
+    "@theia/application-package": "1.39.0",
+    "@theia/ffmpeg": "1.39.0",
+    "@theia/native-webpack-plugin": "1.39.0",
     "@types/fs-extra": "^4.0.2",
     "@types/semver": "^7.3.8",
     "babel-loader": "^8.2.2",
@@ -48,6 +49,7 @@
     "less": "^3.0.3",
     "mini-css-extract-plugin": "^2.6.1",
     "node-abi": "*",
+    "node-loader": "^2.0.0",
     "path-browserify": "^1.0.1",
     "semver": "^7.3.5",
     "setimmediate": "^1.0.5",
@@ -71,7 +73,7 @@
     }
   },
   "devDependencies": {
-    "@theia/ext-scripts": "1.38.0",
+    "@theia/ext-scripts": "1.39.0",
     "@types/node-abi": "*"
   },
   "nyc": {

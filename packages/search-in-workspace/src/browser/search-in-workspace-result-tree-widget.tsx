@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
 import { inject, injectable, postConstruct } from '@theia/core/shared/inversify';
@@ -33,7 +33,7 @@ import {
     codicon,
     TopDownTreeIterator
 } from '@theia/core/lib/browser';
-import { CancellationTokenSource, Emitter, Event, isWindows, ProgressService } from '@theia/core';
+import { CancellationTokenSource, Emitter, EOL, Event, ProgressService } from '@theia/core';
 import {
     EditorManager, EditorDecoration, TrackedRangeStickiness, OverviewRulerLane,
     EditorWidget, EditorOpenerOptions, FindMatch
@@ -718,6 +718,10 @@ export class SearchInWorkspaceResultTreeWidget extends TreeWidget {
         };
     }
 
+    protected override getDepthPadding(depth: number): number {
+        return super.getDepthPadding(depth) + 5;
+    }
+
     protected override renderCaption(node: TreeNode, props: NodeProps): React.ReactNode {
         if (SearchInWorkspaceRootFolderNode.is(node)) {
             return this.renderRootFolderNode(node);
@@ -1210,7 +1214,7 @@ export class SearchInWorkspaceResultTreeWidget extends TreeWidget {
                 strings.push(string);
             }
         }
-        return strings.join(isWindows ? '\r\n' : '\n');
+        return strings.join(EOL);
     }
 }
 

@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
 import {
@@ -55,6 +55,7 @@ import { DebugBreakpoint } from './model/debug-breakpoint';
 import { nls } from '@theia/core/lib/common/nls';
 import { DebugInstructionBreakpoint } from './model/debug-instruction-breakpoint';
 import { DebugConfiguration } from '../common/debug-configuration';
+import { DebugExceptionBreakpoint } from './view/debug-exception-breakpoint';
 
 export namespace DebugMenus {
     export const DEBUG = [...MAIN_MENU_BAR, '6_debug'];
@@ -212,6 +213,11 @@ export namespace DebugCommands {
         originalLabel: 'Edit Logpoint...',
         label: nlsEditBreakpoint('Logpoint')
     }, '', DEBUG_CATEGORY_KEY);
+    export const EDIT_BREAKPOINT_CONDITION = Command.toLocalizedCommand({
+        id: 'debug.breakpoint.editCondition',
+        category: DEBUG_CATEGORY,
+        label: 'Edit Condition...'
+    }, '', DEBUG_CATEGORY_KEY);
     export const REMOVE_BREAKPOINT = Command.toLocalizedCommand({
         id: 'debug.breakpoint.remove',
         category: DEBUG_CATEGORY,
@@ -234,8 +240,7 @@ export namespace DebugCommands {
     });
     export const SHOW_HOVER = Command.toDefaultLocalizedCommand({
         id: 'editor.debug.action.showDebugHover',
-        category: DEBUG_CATEGORY,
-        label: 'Show Hover'
+        label: 'Debug: Show Hover'
     });
 
     export const RESTART_FRAME = Command.toDefaultLocalizedCommand({
@@ -596,7 +601,8 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
 
         registerMenuActions(DebugBreakpointsWidget.EDIT_MENU,
             DebugCommands.EDIT_BREAKPOINT,
-            DebugCommands.EDIT_LOGPOINT
+            DebugCommands.EDIT_LOGPOINT,
+            DebugCommands.EDIT_BREAKPOINT_CONDITION
         );
         registerMenuActions(DebugBreakpointsWidget.REMOVE_MENU,
             DebugCommands.REMOVE_BREAKPOINT,
@@ -786,6 +792,16 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
             },
             isEnabled: () => !!this.selectedLogpoint,
             isVisible: () => !!this.selectedLogpoint
+        });
+        registry.registerCommand(DebugCommands.EDIT_BREAKPOINT_CONDITION, {
+            execute: async () => {
+                const { selectedExceptionBreakpoint } = this;
+                if (selectedExceptionBreakpoint) {
+                    await selectedExceptionBreakpoint.editCondition();
+                }
+            },
+            isEnabled: () => !!this.selectedExceptionBreakpoint?.data.raw.supportsCondition,
+            isVisible: () => !!this.selectedExceptionBreakpoint?.data.raw.supportsCondition
         });
         registry.registerCommand(DebugCommands.REMOVE_BREAKPOINT, {
             execute: () => {
@@ -1215,6 +1231,11 @@ export class DebugFrontendApplicationContribution extends AbstractViewContributi
         if (this.selectedAnyBreakpoint instanceof DebugInstructionBreakpoint) {
             return this.selectedAnyBreakpoint;
         }
+    }
+    get selectedExceptionBreakpoint(): DebugExceptionBreakpoint | undefined {
+        const { breakpoints } = this;
+        const selectedElement = breakpoints && breakpoints.selectedElement;
+        return selectedElement instanceof DebugExceptionBreakpoint ? selectedElement : undefined;
     }
 
     get selectedSettableBreakpoint(): DebugFunctionBreakpoint | DebugInstructionBreakpoint | DebugSourceBreakpoint | undefined {

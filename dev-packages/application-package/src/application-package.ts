@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
 import * as paths from 'path';
@@ -225,6 +225,10 @@ export class ApplicationPackage {
 
     backend(...segments: string[]): string {
         return this.srcGen('backend', ...segments);
+    }
+
+    bundledBackend(...segments: string[]): string {
+        return this.path('backend', 'bundle', ...segments);
     }
 
     frontend(...segments: string[]): string {

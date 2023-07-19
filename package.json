@@ -16,11 +16,12 @@
     "@types/jsdom": "^21.1.1",
     "@types/node": "16",
     "@types/sinon": "^10.0.6",
-    "@types/temp": "^0.8.29",
+    "@types/temp": "^0.9.1",
     "@types/uuid": "^7.0.3",
     "@typescript-eslint/eslint-plugin": "^4.8.1",
     "@typescript-eslint/eslint-plugin-tslint": "^4.8.1",
     "@typescript-eslint/parser": "^4.8.1",
+    "@vscode/vsce": "^2.15.0",
     "chai": "4.3.4",
     "chai-spies": "1.0.0",
     "chai-string": "^1.4.0",
@@ -49,7 +50,7 @@
     "puppeteer-to-istanbul": "^1.4.0",
     "rimraf": "^2.6.1",
     "sinon": "^12.0.0",
-    "temp": "^0.8.3",
+    "temp": "^0.9.1",
     "tslint": "^5.12.0",
     "typedoc": "^0.22.11",
     "typedoc-plugin-external-module-map": "1.3.2",
@@ -61,8 +62,7 @@
     "all": "yarn -s install && yarn -s lint && yarn -s build",
     "browser": "yarn -s --cwd examples/browser",
     "build": "yarn -s compile && yarn -s build:examples",
-    "build-p": "yarn -s compile && lerna run --scope=\"@theia/example-*\" bundle --parallel",
-    "build:examples": "lerna run --scope=\"@theia/example-*\" bundle --parallel",
+    "build:examples": "yarn browser build && yarn electron build",
     "clean": "yarn -s rebuild:clean && yarn -s lint:clean && node scripts/run-reverse-topo.js yarn -s clean",
     "compile": "echo Compiling TypeScript sources... && yarn -s compile:clean && yarn -s compile:tsc",
     "compile:clean": "ts-clean dev-packages/* packages/*",
@@ -95,11 +95,12 @@
   "workspaces": [
     "dev-packages/*",
     "examples/*",
-    "packages/*"
+    "packages/*",
+    "sample-plugins/*/*"
   ],
   "theiaPluginsDir": "plugins",
   "theiaPlugins": {
-    "eclipse-theia.builtin-extension-pack": "https://open-vsx.org/api/eclipse-theia/builtin-extension-pack/1.70.2/file/eclipse-theia.builtin-extension-pack-1.70.2.vsix",
+    "eclipse-theia.builtin-extension-pack": "https://open-vsx.org/api/eclipse-theia/builtin-extension-pack/1.77.0/file/eclipse-theia.builtin-extension-pack-1.77.0.vsix",
     "EditorConfig.EditorConfig": "https://open-vsx.org/api/EditorConfig/EditorConfig/0.14.4/file/EditorConfig.EditorConfig-0.14.4.vsix",
     "dbaeumer.vscode-eslint": "https://open-vsx.org/api/dbaeumer/vscode-eslint/2.1.20/file/dbaeumer.vscode-eslint-2.1.20.vsix"
   },

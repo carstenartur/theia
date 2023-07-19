@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
 /*---------------------------------------------------------------------------------------------
@@ -105,6 +105,7 @@ export class DebugConfigurationManager {
     protected async doInit(): Promise<void> {
         this.debugConfigurationTypeKey = this.contextKeyService.createKey<string>('debugConfigurationType', undefined);
         this.initialized = this.preferences.ready.then(() => {
+            this.workspaceService.onWorkspaceChanged(this.updateModels);
             this.preferences.onPreferenceChanged(e => {
                 if (e.preferenceName === 'launch') {
                     this.updateModels();
@@ -312,7 +313,8 @@ export class DebugConfigurationManager {
     }
 
     async openConfiguration(): Promise<void> {
-        const model = this.getModel();
+        const currentUri = new URI(this.current?.workspaceFolderUri);
+        const model = this.getModel(currentUri);
         if (model) {
             await this.doOpen(model);
         }

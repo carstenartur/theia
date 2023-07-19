@@ -11,7 +11,7 @@
 // with the GNU Classpath Exception which is available at
 // https://www.gnu.org/software/classpath/license.html.
 //
-// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+// SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
 import * as http from 'http';
@@ -20,11 +20,12 @@ import * as url from 'url';
 const vhost = require('vhost');
 import * as express from '@theia/core/shared/express';
 import { BackendApplicationContribution } from '@theia/core/lib/node/backend-application';
-import { injectable, postConstruct } from '@theia/core/shared/inversify';
+import { inject, injectable, postConstruct } from '@theia/core/shared/inversify';
 import { WebviewExternalEndpoint } from '../common/webview-protocol';
 import { environment } from '@theia/core/shared/@theia/application-package/lib/environment';
 import { WsRequestValidatorContribution } from '@theia/core/lib/node/ws-request-validators';
 import { MaybePromise } from '@theia/core/lib/common';
+import { ApplicationPackage } from '@theia/core/shared/@theia/application-package';
 
 @injectable()
 export class PluginApiContribution implements BackendApplicationContribution, WsRequestValidatorContribution {
@@ -32,6 +33,9 @@ export class PluginApiContribution implements BackendApplicationContribution, Ws
     protected webviewExternalEndpointRegExp: RegExp;
 
     protected serveSameOrigin: boolean = false;
+
+    @inject(ApplicationPackage)
+    protected readonly applicationPackage: ApplicationPackage;
 
     @postConstruct()
     protected init(): void {
@@ -42,7 +46,7 @@ export class PluginApiContribution implements BackendApplicationContribution, Ws
 
     configure(app: express.Application): void {
         const webviewApp = express();
-        webviewApp.use('/webview', express.static(path.join(__dirname, '../../../src/main/browser/webview/pre')));
+        webviewApp.use('/webview', express.static(path.join(this.applicationPackage.projectPath, 'lib', 'webview', 'pre')));
         app.use(vhost(this.webviewExternalEndpointRegExp, webviewApp));
     }
 
