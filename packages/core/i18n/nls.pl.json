@@ -30,7 +30,11 @@
         "showPreviousTabInGroup": "Przełączanie do poprzedniej karty w grupie",
         "toggleMaximized": "Przełącz maksymalny"
       },
-      "enhancedPreview": "Kontroluje, czy więcej informacji o zakładce ma być wyświetlanych w poziomych paskach zakładek.",
+      "enhancedPreview": {
+        "classic": "Wyświetla prosty podgląd karty z podstawowymi informacjami.",
+        "enhanced": "Wyświetla rozszerzony podgląd karty z dodatkowymi informacjami.",
+        "visual": "Wyświetla wizualny podgląd karty."
+      },
       "file": {
         "browse": "Przeglądaj stronę"
       },
@@ -79,6 +83,7 @@
     "editor": {
       "dirtyEncoding": "Plik jest zabrudzony. Proszę zapisać go najpierw przed ponownym otwarciem z innym kodowaniem.",
       "editor.codeActionWidget.showHeaders": "Włączenie/wyłączenie pokazywania nagłówków grup w menu akcji kodu.",
+      "editor.experimental.pasteActions.enabled": "Włączanie/wyłączanie edycji z rozszerzeń podczas wklejania.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Spowoduje próbę sformatowania tylko modyfikacji (wymaga kontroli źródła). Jeśli kontrola źródła nie może być użyta, sformatowany zostanie cały plik.",
       "editor.inlayHints.enabled1": "Podpowiedzi są domyślnie wyświetlane i ukrywają się po przytrzymaniu `Ctrl+Alt`.",
       "editor.inlayHints.enabled2": "Podpowiedzi są domyślnie ukryte i pokazują się po przytrzymaniu `Ctrl+Alt`.",
@@ -108,6 +113,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Skopiowałem link do pobrania do schowka.",
       "copyDownloadLink": "Kopiuj Link do pobrania",
       "dialog": {
         "initialLocation": "Przejdź do lokalizacji początkowej",
@@ -137,7 +143,10 @@
     "getting-started": {
       "apiComparator": "{0} Zgodność z API",
       "newExtension": "Budowanie nowego rozszerzenia",
-      "newPlugin": "Tworzenie nowego pluginu"
+      "newPlugin": "Tworzenie nowego pluginu",
+      "startup-editor": {
+        "welcomePage": "Otwórz stronę powitalną, zawierającą treści ułatwiające rozpoczęcie korzystania z witryny {0} i rozszerzeń."
+      }
     },
     "git": {
       "aFewSecondsAgo": "kilka sekund temu",
@@ -216,6 +225,7 @@
         "offset-title": "Bajty do przesunięcia pamięci z {0}"
       },
       "editable": {
+        "apply": "Zastosuj zmiany",
         "clear": "Wyraźne zmiany"
       },
       "endianness": "Endianness",
@@ -323,6 +333,9 @@
       "watchMode": "Uruchom strażnika na opracowywanym pluginie"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Login"
+      },
       "plugins": "Wtyczki",
       "webviewTrace": "Kontroluje śledzenie komunikacji z webviews.",
       "webviewWarnIfUnsecure": "Ostrzega użytkowników, że widoki internetowe są obecnie wdrażane w sposób niezabezpieczony."
@@ -421,6 +434,7 @@
     "vsx-registry": {
       "downloadCount": "Pobierz licz: {0}",
       "errorFetching": "Błąd pobierania rozszerzeń.",
+      "errorFetchingConfigurationHint": "Może to być spowodowane problemami z konfiguracją sieci.",
       "failedInstallingVSIX": "Nie udało się zainstalować {0} z VSIX.",
       "invalidVSIX": "Wybrany plik nie jest prawidłowym pluginem \"*.vsix\".",
       "license": "Licencja: {0}",

@@ -30,7 +30,11 @@
         "showPreviousTabInGroup": "Passer à l'onglet précédent dans le groupe",
         "toggleMaximized": "Toggle Maximisé"
       },
-      "enhancedPreview": "Contrôle si des informations supplémentaires sur l'onglet doivent être affichées dans les barres d'onglets horizontales.",
+      "enhancedPreview": {
+        "classic": "Affiche un simple aperçu de l'onglet avec des informations de base.",
+        "enhanced": "Affiche un aperçu amélioré de l'onglet avec des informations supplémentaires.",
+        "visual": "Affiche un aperçu visuel de l'onglet."
+      },
       "file": {
         "browse": "Parcourir"
       },
@@ -79,6 +83,7 @@
     "editor": {
       "dirtyEncoding": "Le fichier est sale. Veuillez le sauvegarder avant de le rouvrir avec un autre encodage.",
       "editor.codeActionWidget.showHeaders": "Activez/désactivez l'affichage des en-têtes de groupe dans le menu d'action du code.",
+      "editor.experimental.pasteActions.enabled": "Activer/désactiver l'exécution des modifications des extensions lors du collage.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Tentera de formater uniquement les modifications (nécessite le contrôle de la source). Si le contrôle de la source ne peut pas être utilisé, alors le fichier entier sera formaté.",
       "editor.inlayHints.enabled1": "Les conseils d'incrustation sont affichés par défaut et sont masqués lorsque vous maintenez les touches `Ctrl+Alt`.",
       "editor.inlayHints.enabled2": "Les indices d'incrustation sont cachés par défaut et s'affichent en maintenant les touches `Ctrl+Alt`.",
@@ -108,6 +113,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Copie du lien de téléchargement dans le presse-papiers.",
       "copyDownloadLink": "Copier le lien de téléchargement",
       "dialog": {
         "initialLocation": "Aller à l'emplacement initial",
@@ -137,7 +143,10 @@
     "getting-started": {
       "apiComparator": "{0} Compatibilité avec l'API",
       "newExtension": "Construire une nouvelle extension",
-      "newPlugin": "Créer un nouveau plugin"
+      "newPlugin": "Créer un nouveau plugin",
+      "startup-editor": {
+        "welcomePage": "Ouvrez la page d'accueil, dont le contenu vous aidera à démarrer avec {0} et les extensions."
+      }
     },
     "git": {
       "aFewSecondsAgo": "il y a quelques secondes",
@@ -216,6 +225,7 @@
         "offset-title": "Octets pour décaler la mémoire de {0}"
       },
       "editable": {
+        "apply": "Appliquer les changements",
         "clear": "Changements clairs"
       },
       "endianness": "Endianness",
@@ -323,6 +333,9 @@
       "watchMode": "Lancer le watcher sur le plugin en cours de développement"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Connexion"
+      },
       "plugins": "Plugins",
       "webviewTrace": "Contrôle le traçage de la communication avec les webviews.",
       "webviewWarnIfUnsecure": "Avertit les utilisateurs que les webviews sont actuellement déployés de manière non sécurisée."
@@ -421,6 +434,7 @@
     "vsx-registry": {
       "downloadCount": "Compte de téléchargement : {0}",
       "errorFetching": "Erreur de récupération des extensions.",
+      "errorFetchingConfigurationHint": "Cela peut être dû à des problèmes de configuration du réseau.",
       "failedInstallingVSIX": "Échec de l'installation de {0} à partir de VSIX.",
       "invalidVSIX": "Le fichier sélectionné n'est pas un plugin \"*.vsix\" valide.",
       "license": "Licence : {0}",

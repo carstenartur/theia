@@ -30,7 +30,11 @@
         "showPreviousTabInGroup": "Přepnutí na předchozí kartu ve skupině",
         "toggleMaximized": "Přepínání Maximalizováno"
       },
-      "enhancedPreview": "Určuje, zda se mají na vodorovných pásech karet zobrazovat další informace o kartě.",
+      "enhancedPreview": {
+        "classic": "Zobrazí jednoduchý náhled karty se základními informacemi.",
+        "enhanced": "Zobrazení rozšířeného náhledu karty s dalšími informacemi.",
+        "visual": "Zobrazení vizuálního náhledu karty."
+      },
       "file": {
         "browse": "Procházet"
       },
@@ -79,6 +83,7 @@
     "editor": {
       "dirtyEncoding": "Soubor je znečištěný. Než jej znovu otevřete v jiném kódování, nejprve jej uložte.",
       "editor.codeActionWidget.showHeaders": "Povolení/zakázání zobrazování záhlaví skupin v nabídce akcí kódu.",
+      "editor.experimental.pasteActions.enabled": "Povolení/zakázání spouštění úprav z rozšíření při vkládání.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Pokusí se formátovat pouze změny (vyžaduje kontrolu zdrojů). Pokud nelze použít kontrolu zdrojů, bude formátován celý soubor.",
       "editor.inlayHints.enabled1": "Vložené nápovědy se zobrazují ve výchozím nastavení a skrývají se při podržení `Ctrl+Alt`",
       "editor.inlayHints.enabled2": "Vložené nápovědy jsou ve výchozím nastavení skryté a zobrazí se při podržení `Ctrl+Alt`.",
@@ -108,6 +113,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Zkopírujte odkaz ke stažení do schránky.",
       "copyDownloadLink": "Kopírovat odkaz ke stažení",
       "dialog": {
         "initialLocation": "Přejít na počáteční umístění",
@@ -137,7 +143,10 @@
     "getting-started": {
       "apiComparator": "{0} Kompatibilita API",
       "newExtension": "Budování nového rozšíření",
-      "newPlugin": "Vytvoření nového pluginu"
+      "newPlugin": "Vytvoření nového pluginu",
+      "startup-editor": {
+        "welcomePage": "Otevřete úvodní stránku s obsahem, který vám pomůže začít pracovat s webem {0} a rozšířeními."
+      }
     },
     "git": {
       "aFewSecondsAgo": "před několika sekundami",
@@ -216,6 +225,7 @@
         "offset-title": "Bajty pro odsazení paměti od {0}"
       },
       "editable": {
+        "apply": "Použít změny",
         "clear": "Jasné změny"
       },
       "endianness": "Endianness",
@@ -323,6 +333,9 @@
       "watchMode": "Spuštění sledovacího nástroje na vyvíjeném zásuvném modulu"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Přihlášení"
+      },
       "plugins": "Zásuvné moduly",
       "webviewTrace": "Řídí sledování komunikace s webovými pohledy.",
       "webviewWarnIfUnsecure": "Upozorňuje uživatele, že webové náhledy jsou v současné době nasazeny nezabezpečeně."
@@ -421,6 +434,7 @@
     "vsx-registry": {
       "downloadCount": "Počet stažení: {0}",
       "errorFetching": "Chyba při načítání rozšíření.",
+      "errorFetchingConfigurationHint": "To může být způsobeno problémy s konfigurací sítě.",
       "failedInstallingVSIX": "Nepodařilo se nainstalovat {0} z VSIX.",
       "invalidVSIX": "Vybraný soubor není platný zásuvný modul \"*.vsix\".",
       "license": "Licence: {0}",

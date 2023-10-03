@@ -43,6 +43,7 @@ import { nls } from '../../common/nls';
 import { SecondaryWindowHandler } from '../secondary-window-handler';
 import URI from '../../common/uri';
 import { OpenerService } from '../opener-service';
+import { PreviewableWidget } from '../widgets/previewable-widget';
 
 /** The class name added to ApplicationShell instances. */
 const APPLICATION_SHELL_CLASS = 'theia-ApplicationShell';
@@ -244,6 +245,9 @@ export class ApplicationShell extends Widget {
 
     protected readonly onDidChangeCurrentWidgetEmitter = new Emitter<FocusTracker.IChangedArgs<Widget>>();
     readonly onDidChangeCurrentWidget = this.onDidChangeCurrentWidgetEmitter.event;
+
+    protected readonly onDidDoubleClickMainAreaEmitter = new Emitter<void>();
+    readonly onDidDoubleClickMainArea = this.onDidDoubleClickMainAreaEmitter.event;
 
     @inject(TheiaDockPanel.Factory)
     protected readonly dockPanelFactory: TheiaDockPanel.Factory;
@@ -577,6 +581,14 @@ export class ApplicationShell extends Widget {
                 }
             }
         });
+
+        dockPanel.node.addEventListener('dblclick', event => {
+            const el = event.target as Element;
+            if (el.id === MAIN_AREA_ID || el.classList.contains('p-TabBar-content')) {
+                this.onDidDoubleClickMainAreaEmitter.fire();
+            }
+        });
+
         const handler = (e: DragEvent) => {
             if (e.dataTransfer) {
                 e.dataTransfer.dropEffect = 'link';
@@ -1186,6 +1198,9 @@ export class ApplicationShell extends Widget {
                 newValue['onCloseRequest'](msg);
             };
             this.toDisposeOnActiveChanged.push(Disposable.create(() => newValue['onCloseRequest'] = onCloseRequest));
+            if (PreviewableWidget.is(newValue)) {
+                newValue.loaded = true;
+            }
         }
         this.onDidChangeActiveWidgetEmitter.fire(args);
     }

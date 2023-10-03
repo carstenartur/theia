@@ -30,7 +30,11 @@
         "showPreviousTabInGroup": "Zur vorherigen Registerkarte in der Gruppe wechseln",
         "toggleMaximized": "Maximiert umschalten"
       },
-      "enhancedPreview": "Steuert, ob weitere Informationen über die Registerkarte in horizontalen Registerkartenleisten angezeigt werden sollen.",
+      "enhancedPreview": {
+        "classic": "Zeigt eine einfache Vorschau der Registerkarte mit grundlegenden Informationen an.",
+        "enhanced": "Anzeige einer erweiterten Vorschau der Registerkarte mit zusätzlichen Informationen.",
+        "visual": "Zeigen Sie eine visuelle Vorschau der Registerkarte an."
+      },
       "file": {
         "browse": "Durchsuchen"
       },
@@ -79,6 +83,7 @@
     "editor": {
       "dirtyEncoding": "Die Datei ist verschmutzt. Bitte speichern Sie sie zuerst, bevor Sie sie mit einer anderen Kodierung erneut öffnen.",
       "editor.codeActionWidget.showHeaders": "Aktivieren/deaktivieren Sie die Anzeige von Gruppenkopfzeilen im Code-Aktionsmenü.",
+      "editor.experimental.pasteActions.enabled": "Aktivieren/deaktivieren Sie laufende Bearbeitungen von Erweiterungen beim Einfügen.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Es wird versucht, nur Änderungen zu formatieren (erfordert Quellensicherung). Wenn die Versionskontrolle nicht verwendet werden kann, wird die gesamte Datei formatiert.",
       "editor.inlayHints.enabled1": "Inlay-Hinweise werden standardmäßig angezeigt und bei gedrückter Tastenkombination \"Strg+Alt\" ausgeblendet",
       "editor.inlayHints.enabled2": "Inlay-Hinweise sind standardmäßig ausgeblendet und werden angezeigt, wenn die Tastenkombination \"Strg+Alt\" gedrückt wird.",
@@ -108,6 +113,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Kopieren Sie den Download-Link in die Zwischenablage.",
       "copyDownloadLink": "Download-Link kopieren",
       "dialog": {
         "initialLocation": "Zum Ausgangsort gehen",
@@ -137,7 +143,10 @@
     "getting-started": {
       "apiComparator": "{0} API-Kompatibilität",
       "newExtension": "Bau einer neuen Erweiterung",
-      "newPlugin": "Ein neues Plugin erstellen"
+      "newPlugin": "Ein neues Plugin erstellen",
+      "startup-editor": {
+        "welcomePage": "Öffnen Sie die Willkommensseite mit Inhalten, die Ihnen den Einstieg in die Arbeit mit {0} und den Erweiterungen erleichtern."
+      }
     },
     "git": {
       "aFewSecondsAgo": "vor ein paar Sekunden",
@@ -216,6 +225,7 @@
         "offset-title": "Bytes zum Versetzen des Speichers von {0}"
       },
       "editable": {
+        "apply": "Änderungen anwenden",
         "clear": "Deutliche Änderungen"
       },
       "endianness": "Endianness",
@@ -323,6 +333,9 @@
       "watchMode": "Watcher auf Plugin in Entwicklung ausführen"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Anmeldung"
+      },
       "plugins": "Plugins",
       "webviewTrace": "Steuert die Kommunikationsverfolgung mit Webviews.",
       "webviewWarnIfUnsecure": "Warnt Benutzer, dass Webviews derzeit unsicher eingesetzt werden."
@@ -421,6 +434,7 @@
     "vsx-registry": {
       "downloadCount": "Anzahl der Downloads: {0}",
       "errorFetching": "Fehler beim Abrufen von Erweiterungen.",
+      "errorFetchingConfigurationHint": "Dies könnte auf Probleme bei der Netzwerkkonfiguration zurückzuführen sein.",
       "failedInstallingVSIX": "Die Installation von {0} aus VSIX ist fehlgeschlagen.",
       "invalidVSIX": "Die ausgewählte Datei ist kein gültiges \"*.vsix\"-Plugin.",
       "license": "Lizenz: {0}",

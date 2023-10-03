@@ -30,7 +30,11 @@
         "showPreviousTabInGroup": "Mudar para a guia Anterior em Grupo",
         "toggleMaximized": "Alternar ao máximo"
       },
-      "enhancedPreview": "Controla se mais informações sobre a guia devem ser exibidas nas barras horizontais da guia.",
+      "enhancedPreview": {
+        "classic": "Exibir uma visualização simples da guia com informações básicas.",
+        "enhanced": "Exibir uma visualização aprimorada da guia com informações adicionais.",
+        "visual": "Exibe uma prévia visual da guia."
+      },
       "file": {
         "browse": "Navegue"
       },
@@ -79,6 +83,7 @@
     "editor": {
       "dirtyEncoding": "O arquivo está sujo. Por favor, salve-o primeiro antes de reabri-lo com outra codificação.",
       "editor.codeActionWidget.showHeaders": "Habilitar/desabilitar mostrar os cabeçalhos de grupo no menu de ação de código.",
+      "editor.experimental.pasteActions.enabled": "Ativar/desativar a execução de edições de extensões ao colar.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Tentará formatar modificações apenas (requer controle de fonte). Se o controle da fonte não puder ser usado, então o arquivo inteiro será formatado.",
       "editor.inlayHints.enabled1": "Dicas de Inlay estão mostrando por padrão e se escondem ao segurar `Ctrl+Alt`.",
       "editor.inlayHints.enabled2": "Dicas de Inlay são ocultadas por padrão e mostram quando se segura `Ctrl+Alt`.",
@@ -108,6 +113,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Copiou o link de download para a área de transferência.",
       "copyDownloadLink": "Link para download de cópias",
       "dialog": {
         "initialLocation": "Ir para o local inicial",
@@ -137,7 +143,10 @@
     "getting-started": {
       "apiComparator": "{0} Compatibilidade API",
       "newExtension": "Construindo uma nova extensão",
-      "newPlugin": "Construindo um Novo Plugin"
+      "newPlugin": "Construindo um Novo Plugin",
+      "startup-editor": {
+        "welcomePage": "Abra a página de boas-vindas, com conteúdo para ajudar a começar a usar o {0} e as extensões."
+      }
     },
     "git": {
       "aFewSecondsAgo": "alguns segundos atrás",
@@ -216,6 +225,7 @@
         "offset-title": "Bytes para compensar a memória de {0}"
       },
       "editable": {
+        "apply": "Aplicar alterações",
         "clear": "Mudanças claras"
       },
       "endianness": "Endianness",
@@ -323,6 +333,9 @@
       "watchMode": "Executar o watcher no plugin em desenvolvimento"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Login"
+      },
       "plugins": "Plugins",
       "webviewTrace": "Controla o rastreamento da comunicação com visualizações na web.",
       "webviewWarnIfUnsecure": "Adverte os usuários de que as visualizações na web são atualmente implantadas de forma insegura."
@@ -421,6 +434,7 @@
     "vsx-registry": {
       "downloadCount": "Contagem de downloads: {0}",
       "errorFetching": "Extensões de erro de busca.",
+      "errorFetchingConfigurationHint": "Isso pode ser causado por problemas de configuração de rede.",
       "failedInstallingVSIX": "Falha na instalação {0} da VSIX.",
       "invalidVSIX": "O arquivo selecionado não é um plugin \"*.vsix\" válido.",
       "license": "Licença: {0}",
