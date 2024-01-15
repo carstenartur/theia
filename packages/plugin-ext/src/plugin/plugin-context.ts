@@ -57,6 +57,7 @@ import {
     StatusBarAlignment,
     RelativePattern,
     IndentAction,
+    SyntaxTokenType,
     CompletionItem,
     CompletionItemKind,
     CompletionList,
@@ -86,6 +87,7 @@ import {
     InlineValueContext,
     DocumentHighlightKind,
     DocumentHighlight,
+    MultiDocumentHighlight,
     DocumentLink,
     DocumentDropEdit,
     CodeLens,
@@ -161,7 +163,6 @@ import {
     TerminalLocation,
     TerminalExitReason,
     TerminalProfile,
-    TerminalQuickFixType,
     InlayHint,
     InlayHintKind,
     InlayHintLabelPart,
@@ -199,7 +200,10 @@ import {
     DocumentPasteEdit,
     ExternalUriOpenerPriority,
     EditSessionIdentityMatch,
-    TerminalOutputAnchor
+    TerminalOutputAnchor,
+    TerminalQuickFixTerminalCommand,
+    TerminalQuickFixOpener,
+    TestResultState
 } from './types-impl';
 import { AuthenticationExtImpl } from './authentication-ext';
 import { SymbolKind } from '../common/plugin-api-rpc-model';
@@ -228,13 +232,6 @@ import { ClipboardExt } from './clipboard-ext';
 import { WebviewsExtImpl } from './webviews';
 import { ExtHostFileSystemEventService } from './file-system-event-service-ext-impl';
 import { LabelServiceExtImpl } from '../plugin/label-service';
-import {
-    createRunProfile,
-    createTestRun,
-    testItemCollection,
-    createTestItem,
-    invalidateTestResults
-} from './stubs/tests-api';
 import { TimelineExtImpl } from './timeline';
 import { ThemingExtImpl } from './theming';
 import { CommentsExtImpl } from './comments';
@@ -252,6 +249,7 @@ import { NotebookRenderersExtImpl } from './notebook/notebook-renderers';
 import { NotebookKernelsExtImpl } from './notebook/notebook-kernels';
 import { NotebookDocumentsExtImpl } from './notebook/notebook-documents';
 import { NotebookEditorsExtImpl } from './notebook/notebook-editors';
+import { TestingExtImpl } from './tests';
 
 export function createAPIFactory(
     rpc: RPCProtocol,
@@ -299,6 +297,7 @@ export function createAPIFactory(
     const customEditorExt = rpc.set(MAIN_RPC_CONTEXT.CUSTOM_EDITORS_EXT, new CustomEditorsExtImpl(rpc, documents, webviewExt, workspaceExt));
     const webviewViewsExt = rpc.set(MAIN_RPC_CONTEXT.WEBVIEW_VIEWS_EXT, new WebviewViewsExtImpl(rpc, webviewExt));
     const telemetryExt = rpc.set(MAIN_RPC_CONTEXT.TELEMETRY_EXT, new TelemetryExtImpl());
+    const testingExt = rpc.set(MAIN_RPC_CONTEXT.TESTING_EXT, new TestingExtImpl(rpc, commandRegistry));
     rpc.set(MAIN_RPC_CONTEXT.DEBUG_EXT, debugExt);
 
     return function (plugin: InternalPlugin): typeof theia {
@@ -799,7 +798,10 @@ export function createAPIFactory(
             get machineId(): string { return envExt.machineId; },
             get sessionId(): string { return envExt.sessionId; },
             get uriScheme(): string { return envExt.uriScheme; },
-            get shell(): string { return envExt.shell; },
+            get shell(): string { return terminalExt.defaultShell; },
+            get onDidChangeShell(): theia.Event<string> {
+                return terminalExt.onDidChangeShell;
+            },
             get uiKind(): theia.UIKind { return envExt.uiKind; },
             clipboard,
             getEnvVariable(envVarName: string): PromiseLike<string | undefined> {
@@ -915,6 +917,13 @@ export function createAPIFactory(
             registerDocumentHighlightProvider(selector: theia.DocumentSelector, provider: theia.DocumentHighlightProvider): theia.Disposable {
                 return languagesExt.registerDocumentHighlightProvider(selector, provider, pluginToPluginInfo(plugin));
             },
+            /**
+             * @stubbed
+             * @monaco-uplift: wait until API is available in Monaco (1.85.0+)
+             */
+            registerMultiDocumentHighlightProvider(selector: theia.DocumentSelector, provider: theia.MultiDocumentHighlightProvider): theia.Disposable {
+                return Disposable.NULL;
+            },
             registerWorkspaceSymbolProvider(provider: theia.WorkspaceSymbolProvider): theia.Disposable {
                 return languagesExt.registerWorkspaceSymbolProvider(provider, pluginToPluginInfo(plugin));
             },
@@ -993,28 +1002,10 @@ export function createAPIFactory(
             }
         };
 
-        // Tests API (@stubbed)
-        // The following implementation is temporarily `@stubbed` and marked as such under `theia.d.ts`
         const tests: typeof theia.tests = {
-            createTestController(
-                provider,
-                controllerLabel: string,
-                refreshHandler?: (
-                    token: theia.CancellationToken
-                ) => Thenable<void> | void
-            ) {
-                return {
-                    id: provider,
-                    label: controllerLabel,
-                    items: testItemCollection,
-                    refreshHandler,
-                    createRunProfile,
-                    createTestRun,
-                    createTestItem,
-                    invalidateTestResults,
-                    dispose: () => undefined,
-                };
-            },
+            createTestController(id, label: string) {
+                return testingExt.createTestController(id, label);
+            }
         };
         /* End of Tests API */
 
@@ -1246,6 +1237,7 @@ export function createAPIFactory(
             ConfigurationTarget,
             RelativePattern,
             IndentAction,
+            SyntaxTokenType,
             CompletionItem,
             CompletionItemKind,
             CompletionList,
@@ -1277,6 +1269,7 @@ export function createAPIFactory(
             InlineValueContext,
             DocumentHighlightKind,
             DocumentHighlight,
+            MultiDocumentHighlight,
             DocumentLink,
             DocumentDropEdit,
             CodeLens,
@@ -1391,8 +1384,10 @@ export function createAPIFactory(
             TerminalExitReason,
             DocumentPasteEdit,
             ExternalUriOpenerPriority,
-            TerminalQuickFixType,
-            EditSessionIdentityMatch
+            TerminalQuickFixTerminalCommand,
+            TerminalQuickFixOpener,
+            EditSessionIdentityMatch,
+            TestResultState
         };
     };
 }

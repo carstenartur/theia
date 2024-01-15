@@ -845,6 +845,37 @@ export enum IndentAction {
     Outdent = 3
 }
 
+export namespace SyntaxTokenType {
+    export function toString(v: SyntaxTokenType | unknown): 'other' | 'comment' | 'string' | 'regex' {
+        switch (v) {
+            case SyntaxTokenType.Other: return 'other';
+            case SyntaxTokenType.Comment: return 'comment';
+            case SyntaxTokenType.String: return 'string';
+            case SyntaxTokenType.RegEx: return 'regex';
+        }
+        return 'other';
+    }
+}
+
+export enum SyntaxTokenType {
+    /**
+     * Everything except tokens that are part of comments, string literals and regular expressions.
+     */
+    Other = 0,
+    /**
+     * A comment.
+     */
+    Comment = 1,
+    /**
+     * A string literal.
+     */
+    String = 2,
+    /**
+     * A regular expression.
+     */
+    RegEx = 3
+}
+
 @es5ClassCompat
 export class TextEdit {
 
@@ -1562,6 +1593,30 @@ export class DocumentHighlight {
     }
 }
 
+@es5ClassCompat
+export class MultiDocumentHighlight {
+
+    /**
+     * The URI of the document containing the highlights.
+     */
+    uri: URI;
+
+    /**
+     * The highlights for the document.
+     */
+    highlights: DocumentHighlight[];
+
+    /**
+     * Creates a new instance of MultiDocumentHighlight.
+     * @param uri The URI of the document containing the highlights.
+     * @param highlights The highlights for the document.
+     */
+    constructor(uri: URI, highlights: DocumentHighlight[]) {
+        this.uri = uri;
+        this.highlights = highlights;
+    }
+}
+
 export type Definition = Location | Location[];
 
 @es5ClassCompat
@@ -1657,6 +1712,7 @@ export class CodeActionKind {
     public static readonly Source = CodeActionKind.Empty.append('source');
     public static readonly SourceOrganizeImports = CodeActionKind.Source.append('organizeImports');
     public static readonly SourceFixAll = CodeActionKind.Source.append('fixAll');
+    public static readonly Notebook = CodeActionKind.Empty.append('notebook');
 
     constructor(
         public readonly value: string
@@ -2181,11 +2237,6 @@ export enum TerminalExitReason {
     Process = 2,
     User = 3,
     Extension = 4,
-}
-
-export enum TerminalQuickFixType {
-    command = 'command',
-    opener = 'opener'
 }
 
 @es5ClassCompat
@@ -3227,6 +3278,16 @@ export class LinkedEditingRanges {
     }
 }
 
+// Copied from https://github.com/microsoft/vscode/blob/1.72.2/src/vs/workbench/api/common/extHostTypes.ts
+export enum TestResultState {
+    Queued = 1,
+    Running = 2,
+    Passed = 3,
+    Failed = 4,
+    Skipped = 5,
+    Errored = 6
+}
+
 export enum TestRunProfileKind {
     Run = 1,
     Debug = 2,
@@ -3238,8 +3299,11 @@ export class TestTag implements theia.TestTag {
     constructor(public readonly id: string) { }
 }
 
+let nextTestRunId = 0;
 @es5ClassCompat
 export class TestRunRequest implements theia.TestRunRequest {
+    testRunId: number = nextTestRunId++;
+
     constructor(
         public readonly include: theia.TestItem[] | undefined = undefined,
         public readonly exclude: theia.TestItem[] | undefined = undefined,
@@ -3253,6 +3317,7 @@ export class TestMessage implements theia.TestMessage {
     public expectedOutput?: string;
     public actualOutput?: string;
     public location?: theia.Location;
+    public contextValue?: string;
 
     public static diff(message: string | theia.MarkdownString, expected: string, actual: string): theia.TestMessage {
         const msg = new TestMessage(message);
@@ -3630,3 +3695,30 @@ export enum EditSessionIdentityMatch {
     None = 0
 }
 // #endregion
+
+// #region terminalQuickFixProvider
+export class TerminalQuickFixTerminalCommand {
+    /**
+     * The terminal command to run
+     */
+    terminalCommand: string;
+    /**
+     * Whether the command should be executed or just inserted (default)
+     */
+    shouldExecute?: boolean;
+    /**
+     * @stubbed
+     */
+    constructor(terminalCommand: string, shouldExecute?: boolean) { }
+}
+export class TerminalQuickFixOpener {
+    /**
+     * The uri to open
+     */
+    uri: theia.Uri;
+    /**
+     * @stubbed
+     */
+    constructor(uri: theia.Uri) { }
+}
+

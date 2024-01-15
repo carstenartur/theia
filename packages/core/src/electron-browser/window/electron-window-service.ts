@@ -15,10 +15,12 @@
 // *****************************************************************************
 
 import { injectable, inject, postConstruct } from 'inversify';
-import { NewWindowOptions } from '../../common/window';
+import { NewWindowOptions, WindowSearchParams } from '../../common/window';
 import { DefaultWindowService } from '../../browser/window/default-window-service';
 import { ElectronMainWindowService } from '../../electron-common/electron-main-window-service';
 import { ElectronWindowPreferences } from './electron-window-preferences';
+import { ConnectionCloseService } from '../../common/messaging/connection-management';
+import { FrontendIdProvider } from '../../browser/messaging/frontend-id-provider';
 
 @injectable()
 export class ElectronWindowService extends DefaultWindowService {
@@ -33,19 +35,25 @@ export class ElectronWindowService extends DefaultWindowService {
      */
     protected closeOnUnload: boolean = false;
 
+    @inject(FrontendIdProvider)
+    protected readonly frontendIdProvider: FrontendIdProvider;
+
     @inject(ElectronMainWindowService)
     protected readonly delegate: ElectronMainWindowService;
 
     @inject(ElectronWindowPreferences)
     protected readonly electronWindowPreferences: ElectronWindowPreferences;
 
+    @inject(ConnectionCloseService)
+    protected readonly connectionCloseService: ConnectionCloseService;
+
     override openNewWindow(url: string, { external }: NewWindowOptions = {}): undefined {
         this.delegate.openNewWindow(url, { external });
         return undefined;
     }
 
-    override openNewDefaultWindow(): void {
-        this.delegate.openNewDefaultWindow();
+    override openNewDefaultWindow(params?: WindowSearchParams): void {
+        this.delegate.openNewDefaultWindow(params);
     }
 
     @postConstruct()
@@ -55,6 +63,9 @@ export class ElectronWindowService extends DefaultWindowService {
             if (e.preferenceName === 'window.zoomLevel') {
                 this.updateWindowZoomLevel();
             }
+        });
+        window.electronTheiaCore.onAboutToClose(() => {
+            this.connectionCloseService.markForClose(this.frontendIdProvider.getId());
         });
     }
 
@@ -75,7 +86,12 @@ export class ElectronWindowService extends DefaultWindowService {
         }
     }
 
-    override reload(): void {
-        window.electronTheiaCore.requestReload();
+    override reload(params?: WindowSearchParams): void {
+        if (params) {
+            const query = Object.entries(params).map(([name, value]) => `${name}=${value}`).join('&');
+            location.search = query;
+        } else {
+            window.electronTheiaCore.requestReload();
+        }
     }
 }

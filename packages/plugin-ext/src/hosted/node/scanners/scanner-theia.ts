@@ -23,6 +23,7 @@ import {
     buildFrontendModuleName,
     DebuggerContribution,
     IconThemeContribution,
+    IconContribution,
     IconUrl,
     Keybinding,
     LanguageConfiguration,
@@ -60,7 +61,8 @@ import {
     PluginPackageTranslation,
     Translation,
     PluginIdentifiers,
-    TerminalProfile
+    TerminalProfile,
+    PluginIconContribution
 } from '../../../common/plugin-protocol';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -74,21 +76,16 @@ import { deepClone } from '@theia/core/lib/common/objects';
 import { PreferenceSchema, PreferenceSchemaProperties } from '@theia/core/lib/common/preferences/preference-schema';
 import { TaskDefinition } from '@theia/task/lib/common/task-protocol';
 import { ColorDefinition } from '@theia/core/lib/common/color';
+import { CSSIcon } from '@theia/core/lib/common/markdown-rendering/icon-utilities';
 import { PluginUriFactory } from './plugin-uri-factory';
 
-namespace nls {
-    export function localize(key: string, _default: string): string {
-        return _default;
-    }
-}
-
-const INTERNAL_CONSOLE_OPTIONS_SCHEMA = {
-    enum: ['neverOpen', 'openOnSessionStart', 'openOnFirstSessionStart'],
-    default: 'openOnFirstSessionStart',
-    description: nls.localize('internalConsoleOptions', 'Controls when the internal debug console should open.')
-};
-
 const colorIdPattern = '^\\w+[.\\w+]*$';
+const iconIdPattern = `^${CSSIcon.iconNameSegment}(-${CSSIcon.iconNameSegment})+$`;
+
+function getFileExtension(filePath: string): string {
+    const index = filePath.lastIndexOf('.');
+    return index === -1 ? '' : filePath.substring(index + 1);
+}
 
 @injectable()
 export class TheiaPluginScanner implements PluginScanner {
@@ -332,6 +329,12 @@ export class TheiaPluginScanner implements PluginScanner {
         }
 
         try {
+            contributions.icons = this.readIcons(rawPlugin);
+        } catch (err) {
+            console.error(`Could not read '${rawPlugin.name}' contribution 'icons'.`, rawPlugin.contributes.icons, err);
+        }
+
+        try {
             contributions.iconThemes = this.readIconThemes(rawPlugin);
         } catch (err) {
             console.error(`Could not read '${rawPlugin.name}' contribution 'iconThemes'.`, rawPlugin.contributes.iconThemes, err);
@@ -349,17 +352,16 @@ export class TheiaPluginScanner implements PluginScanner {
             console.error(`Could not read '${rawPlugin.name}' contribution 'terminals'.`, rawPlugin.contributes.terminal, err);
         }
 
-        const [localizationsResult, languagesResult, grammarsResult] = await Promise.allSettled([
-            this.readLocalizations(rawPlugin),
-            rawPlugin.contributes.languages ? this.readLanguages(rawPlugin.contributes.languages, rawPlugin.packagePath) : undefined,
+        try {
+            contributions.localizations = this.readLocalizations(rawPlugin);
+        } catch (err) {
+            console.error(`Could not read '${rawPlugin.name}' contribution 'localizations'.`, rawPlugin.contributes.localizations, err);
+        }
+
+        const [languagesResult, grammarsResult] = await Promise.allSettled([
+            rawPlugin.contributes.languages ? this.readLanguages(rawPlugin.contributes.languages, rawPlugin) : undefined,
             rawPlugin.contributes.grammars ? this.grammarsReader.readGrammars(rawPlugin.contributes.grammars, rawPlugin.packagePath) : undefined
         ]);
-
-        if (localizationsResult.status === 'fulfilled') {
-            contributions.localizations = localizationsResult.value;
-        } else {
-            console.error(`Could not read '${rawPlugin.name}' contribution 'localizations'.`, rawPlugin.contributes.localizations, localizationsResult.reason);
-        }
 
         if (rawPlugin.contributes.languages) {
             if (languagesResult.status === 'fulfilled') {
@@ -387,31 +389,29 @@ export class TheiaPluginScanner implements PluginScanner {
         return pck.contributes.terminal.profiles.filter(profile => profile.id && profile.title);
     }
 
-    protected async readLocalizations(pck: PluginPackage): Promise<Localization[] | undefined> {
+    protected readLocalizations(pck: PluginPackage): Localization[] | undefined {
         if (!pck.contributes || !pck.contributes.localizations) {
             return undefined;
         }
-        return Promise.all(pck.contributes.localizations.map(e => this.readLocalization(e, pck.packagePath)));
+        return pck.contributes.localizations.map(e => this.readLocalization(e, pck.packagePath));
     }
 
-    protected async readLocalization({ languageId, languageName, localizedLanguageName, translations }: PluginPackageLocalization, pluginPath: string): Promise<Localization> {
+    protected readLocalization({ languageId, languageName, localizedLanguageName, translations }: PluginPackageLocalization, pluginPath: string): Localization {
         const local: Localization = {
             languageId,
             languageName,
             localizedLanguageName,
             translations: []
         };
-        local.translations = await Promise.all(translations.map(e => this.readTranslation(e, pluginPath)));
+        local.translations = translations.map(e => this.readTranslation(e, pluginPath));
         return local;
     }
 
-    protected async readTranslation(packageTranslation: PluginPackageTranslation, pluginPath: string): Promise<Translation> {
-        const translation = await this.readJson<Translation>(path.resolve(pluginPath, packageTranslation.path));
-        if (!translation) {
-            throw new Error(`Could not read json file '${packageTranslation.path}'.`);
-        }
-        translation.id = packageTranslation.id;
-        translation.path = packageTranslation.path;
+    protected readTranslation(packageTranslation: PluginPackageTranslation, pluginPath: string): Translation {
+        const translation: Translation = {
+            id: packageTranslation.id,
+            path: packageTranslation.path
+        };
         return translation;
     }
 
@@ -519,6 +519,59 @@ export class TheiaPluginScanner implements PluginScanner {
                 label: contribution.label,
                 uiTheme: contribution.uiTheme
             });
+        }
+        return result;
+    }
+
+    protected readIcons(pck: PluginPackage): IconContribution[] | undefined {
+        if (!pck.contributes || !pck.contributes.icons) {
+            return undefined;
+        }
+        const result: IconContribution[] = [];
+        const iconEntries = <PluginIconContribution>(<unknown>pck.contributes.icons);
+        for (const id in iconEntries) {
+            if (pck.contributes.icons.hasOwnProperty(id)) {
+                if (!id.match(iconIdPattern)) {
+                    console.error("'configuration.icons' keys represent the icon id and can only contain letter, digits and minuses. " +
+                        'They need to consist of at least two segments in the form `component-iconname`.', 'extension: ', pck.name, 'icon id: ', id);
+                    return;
+                }
+                const iconContribution = iconEntries[id];
+                if (typeof iconContribution.description !== 'string' || iconContribution.description['length'] === 0) {
+                    console.error('configuration.icons.description must be defined and can not be empty, ', 'extension: ', pck.name, 'icon id: ', id);
+                    return;
+                }
+
+                const defaultIcon = iconContribution.default;
+                if (typeof defaultIcon === 'string') {
+                    result.push({
+                        id,
+                        extensionId: pck.publisher + '.' + pck.name,
+                        description: iconContribution.description,
+                        defaults: { id: defaultIcon }
+                    });
+                } else if (typeof defaultIcon === 'object' && typeof defaultIcon.fontPath === 'string' && typeof defaultIcon.fontCharacter === 'string') {
+                    const format = getFileExtension(defaultIcon.fontPath);
+                    if (['woff', 'woff2', 'ttf'].indexOf(format) === -1) {
+                        console.warn("Expected `contributes.icons.default.fontPath` to have file extension 'woff', woff2' or 'ttf', is '{0}'.", format);
+                        return;
+                    }
+
+                    const iconFontLocation = this.pluginUriFactory.createUri(pck, defaultIcon.fontPath).toString();
+                    result.push({
+                        id,
+                        extensionId: pck.publisher + '.' + pck.name,
+                        description: iconContribution.description,
+                        defaults: {
+                            fontCharacter: defaultIcon.fontCharacter,
+                            location: iconFontLocation
+                        }
+                    });
+                } else {
+                    console.error("'configuration.icons.default' must be either a reference to the id of an other theme icon (string) or a icon definition (object) with ",
+                        'properties `fontPath` and `fontCharacter`.');
+                }
+            }
         }
         return result;
     }
@@ -658,8 +711,8 @@ export class TheiaPluginScanner implements PluginScanner {
         return result;
     }
 
-    private async readLanguages(rawLanguages: PluginPackageLanguageContribution[], pluginPath: string): Promise<LanguageContribution[]> {
-        return Promise.all(rawLanguages.map(language => this.readLanguage(language, pluginPath)));
+    private async readLanguages(rawLanguages: PluginPackageLanguageContribution[], plugin: PluginPackage): Promise<LanguageContribution[]> {
+        return Promise.all(rawLanguages.map(language => this.readLanguage(language, plugin)));
     }
 
     private readSubmenus(rawSubmenus: PluginPackageSubmenu[], plugin: PluginPackage): Submenu[] {
@@ -676,8 +729,9 @@ export class TheiaPluginScanner implements PluginScanner {
 
     }
 
-    private async readLanguage(rawLang: PluginPackageLanguageContribution, pluginPath: string): Promise<LanguageContribution> {
+    private async readLanguage(rawLang: PluginPackageLanguageContribution, plugin: PluginPackage): Promise<LanguageContribution> {
         // TODO: add validation to all parameters
+        const icon = this.transformIconUrl(plugin, rawLang.icon);
         const result: LanguageContribution = {
             id: rawLang.id,
             aliases: rawLang.aliases,
@@ -685,10 +739,11 @@ export class TheiaPluginScanner implements PluginScanner {
             filenamePatterns: rawLang.filenamePatterns,
             filenames: rawLang.filenames,
             firstLine: rawLang.firstLine,
-            mimetypes: rawLang.mimetypes
+            mimetypes: rawLang.mimetypes,
+            icon: icon?.iconUrl ?? icon?.themeIcon
         };
         if (rawLang.configuration) {
-            const rawConfiguration = await this.readJson<PluginPackageLanguageContributionConfiguration>(path.resolve(pluginPath, rawLang.configuration));
+            const rawConfiguration = await this.readJson<PluginPackageLanguageContributionConfiguration>(path.resolve(plugin.packagePath, rawLang.configuration));
             if (rawConfiguration) {
                 const configuration: LanguageConfiguration = {
                     brackets: rawConfiguration.brackets,
@@ -728,11 +783,9 @@ export class TheiaPluginScanner implements PluginScanner {
             program: rawDebugger.program,
             args: rawDebugger.args,
             runtime: rawDebugger.runtime,
-            runtimeArgs: rawDebugger.runtimeArgs
+            runtimeArgs: rawDebugger.runtimeArgs,
+            configurationAttributes: rawDebugger.configurationAttributes
         };
-
-        result.configurationAttributes = rawDebugger.configurationAttributes
-            && this.resolveSchemaAttributes(rawDebugger.type, rawDebugger.configurationAttributes);
 
         return result;
     }
@@ -760,85 +813,6 @@ export class TheiaPluginScanner implements PluginScanner {
         schema.type = 'object';
         schema.properties!.type = { type: 'string', const: definition.type };
         return schema;
-    }
-
-    protected resolveSchemaAttributes(type: string, configurationAttributes: { [request: string]: IJSONSchema }): IJSONSchema[] {
-        const taskSchema = {};
-        return Object.keys(configurationAttributes).map(request => {
-            const attributes: IJSONSchema = deepClone(configurationAttributes[request]);
-            const defaultRequired = ['name', 'type', 'request'];
-            attributes.required = attributes.required && attributes.required.length ? defaultRequired.concat(attributes.required) : defaultRequired;
-            attributes.additionalProperties = false;
-            attributes.type = 'object';
-            if (!attributes.properties) {
-                attributes.properties = {};
-            }
-            const properties = attributes.properties;
-            properties['type'] = {
-                enum: [type],
-                description: nls.localize('debugType', 'Type of configuration.'),
-                pattern: '^(?!node2)',
-                errorMessage: nls.localize('debugTypeNotRecognised',
-                    'The debug type is not recognized. Make sure that you have a corresponding debug extension installed and that it is enabled.'),
-                patternErrorMessage: nls.localize('node2NotSupported',
-                    '"node2" is no longer supported, use "node" instead and set the "protocol" attribute to "inspector".')
-            };
-            properties['name'] = {
-                type: 'string',
-                description: nls.localize('debugName', 'Name of configuration; appears in the launch configuration drop down menu.'),
-                default: 'Launch'
-            };
-            properties['request'] = {
-                enum: [request],
-                description: nls.localize('debugRequest', 'Request type of configuration. Can be "launch" or "attach".'),
-            };
-            properties['debugServer'] = {
-                type: 'number',
-                description: nls.localize('debugServer',
-                    'For debug extension development only: if a port is specified VS Code tries to connect to a debug adapter running in server mode'),
-                default: 4711
-            };
-            properties['preLaunchTask'] = {
-                anyOf: [taskSchema, {
-                    type: ['string'],
-                }],
-                default: '',
-                description: nls.localize('debugPrelaunchTask', 'Task to run before debug session starts.')
-            };
-            properties['postDebugTask'] = {
-                anyOf: [taskSchema, {
-                    type: ['string'],
-                }],
-                default: '',
-                description: nls.localize('debugPostDebugTask', 'Task to run after debug session ends.')
-            };
-            properties['internalConsoleOptions'] = INTERNAL_CONSOLE_OPTIONS_SCHEMA;
-
-            const osProperties = Object.assign({}, properties);
-            properties['windows'] = {
-                type: 'object',
-                description: nls.localize('debugWindowsConfiguration', 'Windows specific launch configuration attributes.'),
-                properties: osProperties
-            };
-            properties['osx'] = {
-                type: 'object',
-                description: nls.localize('debugOSXConfiguration', 'OS X specific launch configuration attributes.'),
-                properties: osProperties
-            };
-            properties['linux'] = {
-                type: 'object',
-                description: nls.localize('debugLinuxConfiguration', 'Linux specific launch configuration attributes.'),
-                properties: osProperties
-            };
-            Object.keys(attributes.properties).forEach(name => {
-                // Use schema allOf property to get independent error reporting #21113
-                attributes!.properties![name].pattern = attributes!.properties![name].pattern || '^(?!.*\\$\\{(env|config|command)\\.)';
-                attributes!.properties![name].patternErrorMessage = attributes!.properties![name].patternErrorMessage ||
-                    nls.localize('deprecatedVariables', "'env.', 'config.' and 'command.' are deprecated, use 'env:', 'config:' and 'command:' instead.");
-            });
-
-            return attributes;
-        });
     }
 
     private extractValidAutoClosingPairs(langId: string, configuration: PluginPackageLanguageContributionConfiguration): AutoClosingPairConditional[] | undefined {

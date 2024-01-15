@@ -27,13 +27,14 @@ import { MarkdownString as PluginMarkdownStringImpl } from './markdown-string';
 import * as types from './types-impl';
 import { UriComponents } from '../common/uri-components';
 import { isReadonlyArray } from '../common/arrays';
-import { MarkdownString as MarkdownStringDTO } from '@theia/core/lib/common/markdown-rendering';
-import { DisposableCollection, isEmptyObject, isObject } from '@theia/core/lib/common';
+import { DisposableCollection, Mutable, isEmptyObject, isObject } from '@theia/core/lib/common';
 import * as notebooks from '@theia/notebook/lib/common';
 import { CommandsConverter } from './command-registry';
 import { BinaryBuffer } from '@theia/core/lib/common/buffer';
-import { CellData, CellExecutionUpdateType, CellOutput, CellOutputItem, CellRange, isTextStreamMime } from '@theia/notebook/lib/common';
-import { CellExecuteUpdate, CellExecutionComplete } from '@theia/notebook/lib/browser';
+import { CellRange, isTextStreamMime } from '@theia/notebook/lib/common';
+import { MarkdownString as MarkdownStringDTO } from '@theia/core/lib/common/markdown-rendering';
+
+import { TestItemDTO, TestMessageDTO } from '../common/test-types';
 
 const SIDE_GROUP = -2;
 const ACTIVE_GROUP = -1;
@@ -459,7 +460,13 @@ export function toInlineValueContext(inlineValueContext: model.InlineValueContex
     };
 }
 
-export function fromLocation(location: theia.Location): model.Location {
+// eslint-disable-next-line @typescript-eslint/no-shadow
+export function fromLocation(location: theia.Location): model.Location;
+export function fromLocation(location: theia.Location | undefined): model.Location | undefined;
+export function fromLocation(location: theia.Location | undefined): model.Location | undefined {
+    if (!location) {
+        return undefined;
+    }
     return <model.Location>{
         uri: location.uri,
         range: fromRange(location.range)
@@ -1628,121 +1635,78 @@ export namespace NotebookKernelSourceAction {
     }
 }
 
-export namespace NotebookDto {
-
-    export function toNotebookOutputItemDto(item: CellOutputItem): rpc.NotebookOutputItemDto {
-        return {
-            mime: item.mime,
-            valueBytes: item.data
-        };
-    }
-
-    export function toNotebookOutputDto(output: CellOutput): rpc.NotebookOutputDto {
-        return {
-            outputId: output.outputId,
-            metadata: output.metadata,
-            items: output.outputs.map(toNotebookOutputItemDto)
-        };
-    }
-
-    export function toNotebookCellDataDto(cell: CellData): rpc.NotebookCellDataDto {
-        return {
-            cellKind: cell.cellKind,
-            language: cell.language,
-            source: cell.source,
-            internalMetadata: cell.internalMetadata,
-            metadata: cell.metadata,
-            outputs: cell.outputs.map(toNotebookOutputDto)
-        };
-    }
-
-    // export function toNotebookDataDto(data: NotebookData): rpc.NotebookDataDto {
-    //     return {
-    //         metadata: data.metadata,
-    //         cells: data.cells.map(toNotebookCellDataDto)
-    //     };
-    // }
-
-    export function fromNotebookOutputItemDto(item: rpc.NotebookOutputItemDto): CellOutputItem {
-        return {
-            mime: item.mime,
-            data: item.valueBytes
-        };
-    }
-
-    export function fromNotebookOutputDto(output: rpc.NotebookOutputDto): CellOutput {
-        return {
-            outputId: output.outputId,
-            metadata: output.metadata,
-            outputs: output.items.map(fromNotebookOutputItemDto)
-        };
-    }
-
-    export function fromNotebookCellDataDto(cell: rpc.NotebookCellDataDto): CellData {
-        return {
-            cellKind: cell.cellKind,
-            language: cell.language,
-            source: cell.source,
-            outputs: cell.outputs.map(fromNotebookOutputDto),
-            metadata: cell.metadata,
-            internalMetadata: cell.internalMetadata
-        };
-    }
-
-    // export function fromNotebookDataDto(data: rpc.NotebookDataDto): NotebookData {
-    //     return {
-    //         metadata: data.metadata,
-    //         cells: data.cells.map(fromNotebookCellDataDto)
-    //     };
-    // }
-
-    // export function toNotebookCellDto(cell: Cell): rpc.NotebookCellDto {
-    //     return {
-    //         handle: cell.handle,
-    //         uri: cell.uri,
-    //         source: cell.textBuffer.getLinesContent(),
-    //         eol: cell.textBuffer.getEOL(),
-    //         language: cell.language,
-    //         cellKind: cell.cellKind,
-    //         outputs: cell.outputs.map(toNotebookOutputDto),
-    //         metadata: cell.metadata,
-    //         internalMetadata: cell.internalMetadata,
-    //     };
-    // }
-
-    export function fromCellExecuteUpdateDto(data: rpc.CellExecuteUpdateDto): CellExecuteUpdate {
-        if (data.editType === CellExecutionUpdateType.Output) {
-            return {
-                editType: data.editType,
-                cellHandle: data.cellHandle,
-                append: data.append,
-                outputs: data.outputs.map(fromNotebookOutputDto)
-            };
-        } else if (data.editType === CellExecutionUpdateType.OutputItems) {
-            return {
-                editType: data.editType,
-                append: data.append,
-                items: data.items.map(fromNotebookOutputItemDto)
-            };
-        } else {
-            return data;
+export namespace TestMessage {
+    export function from(message: theia.TestMessage | readonly theia.TestMessage[]): TestMessageDTO[] {
+        if (isReadonlyArray(message)) {
+            return message.map(msg => TestMessage.from(msg)[0]);
         }
+        return [{
+            location: fromLocation(message.location),
+            message: fromMarkdown(message.message)!,
+            expected: message.expectedOutput,
+            actual: message.actualOutput,
+            contextValue: message.contextValue
+        }];
+    }
+}
+
+export namespace TestItem {
+    export function from(test: theia.TestItem): TestItemDTO {
+        return <TestItemDTO>TestItem.fromPartial(test);
     }
 
-    export function fromCellExecuteCompleteDto(data: rpc.CellExecutionCompleteDto): CellExecutionComplete {
-        return data;
-    }
+    export function fromPartial(test: Partial<theia.TestItem>): Partial<TestItemDTO> {
+        const result: Partial<Mutable<TestItemDTO>> = {};
 
-    // export function fromCellEditOperationDto(edit: rpc.CellEditOperationDto): CellEditOperation {
-    //     if (edit.editType === CellEditType.Replace) {
-    //         return {
-    //             editType: edit.editType,
-    //             index: edit.index,
-    //             count: edit.count,
-    //             cells: edit.cells.map(fromNotebookCellDataDto)
-    //         };
-    //     } else {
-    //         return edit;
-    //     }
-    // }
+        if ('id' in test) {
+            result.id = test.id;
+        }
+
+        if ('uri' in test) {
+            result.uri = test.uri;
+        }
+
+        if ('label' in test) {
+            result.label = test.label;
+        }
+
+        if ('range' in test) {
+            result.range = fromRange(test.range);
+        }
+
+        if ('sortKey' in test) {
+            result.sortKey = test.sortText;
+        }
+
+        if ('tags' in test) {
+            result.tags = test.tags ? test.tags.map(tag => tag.id) : [];
+        }
+        if ('busy' in test) {
+            result.busy = test.busy!;
+        }
+        if ('sortKey' in test) {
+            result.sortKey = test.sortText;
+        }
+        if ('canResolveChildren' in test) {
+            result.canResolveChildren = test.canResolveChildren!;
+        }
+        if ('description' in test) {
+            result.description = test.description;
+        }
+
+        if ('description' in test) {
+            result.error = test.error;
+        }
+
+        if (test.children) {
+            const children: TestItemDTO[] = [];
+            test.children.forEach(item => {
+                children.push(TestItem.from(item));
+            });
+            result.children = children;
+        }
+
+        return result;
+
+    }
 }

@@ -18,13 +18,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, Emitter, URI } from '@theia/core';
+import { Disposable, DisposableCollection, Emitter, URI } from '@theia/core';
 import { inject, injectable } from '@theia/core/shared/inversify';
 import { NotebookService } from './notebook-service';
 import {
     CellEditType, CellExecuteOutputEdit, CellExecuteOutputItemEdit, CellExecutionUpdateType,
-    CellUri, CellPartialInternalMetadataEditByHandle, NotebookCellExecutionState, CellEditOperation, NotebookCellInternalMetadata
+    CellUri, NotebookCellExecutionState, NotebookCellInternalMetadata
 } from '../../common';
+import { CellPartialInternalMetadataEditByHandle, CellEditOperation } from '../notebook-types';
 import { NotebookModel } from '../view-model/notebook-model';
 import { v4 } from 'uuid';
 
@@ -43,26 +44,6 @@ export interface CellExecutionStateUpdate {
     isPaused?: boolean;
 }
 
-export interface ICellExecutionStateUpdate {
-    editType: CellExecutionUpdateType.ExecutionState;
-    executionOrder?: number;
-    runStartTime?: number;
-    didPause?: boolean;
-    isPaused?: boolean;
-}
-
-export interface ICellExecutionStateUpdate {
-    editType: CellExecutionUpdateType.ExecutionState;
-    executionOrder?: number;
-    runStartTime?: number;
-    didPause?: boolean;
-    isPaused?: boolean;
-}
-
-export interface ICellExecutionComplete {
-    runEndTime?: number;
-    lastRunSuccess?: boolean;
-}
 export enum NotebookExecutionType {
     cell,
     notebook
@@ -85,7 +66,9 @@ export class NotebookExecutionStateService implements Disposable {
     @inject(NotebookService)
     protected notebookService: NotebookService;
 
-    protected readonly executions = new Map<string, CellExecution>();
+    protected toDispose: DisposableCollection = new DisposableCollection();
+
+    protected readonly executions = new Map<string, Map<number, CellExecution>>();
 
     private readonly onDidChangeExecutionEmitter = new Emitter<CellExecutionStateChangedEvent>();
     onDidChangeExecution = this.onDidChangeExecutionEmitter.event;
@@ -93,18 +76,21 @@ export class NotebookExecutionStateService implements Disposable {
     private readonly onDidChangeLastRunFailStateEmitter = new Emitter<NotebookFailStateChangedEvent>();
     onDidChangeLastRunFailState = this.onDidChangeLastRunFailStateEmitter.event;
 
-    createCellExecution(notebookUri: URI, cellHandle: number): CellExecution {
+    getOrCreateCellExecution(notebookUri: URI, cellHandle: number): CellExecution {
         const notebook = this.notebookService.getNotebookEditorModel(notebookUri);
 
         if (!notebook) {
             throw new Error(`Notebook not found: ${notebookUri.toString()}`);
         }
 
-        let execution = this.executions.get(`${notebookUri}/${cellHandle}`);
+        let execution = this.executions.get(notebookUri.toString())?.get(cellHandle);
 
         if (!execution) {
             execution = this.createNotebookCellExecution(notebook, cellHandle);
-            this.executions.set(`${notebookUri}/${cellHandle}`, execution);
+            if (!this.executions.has(notebookUri.toString())) {
+                this.executions.set(notebookUri.toString(), new Map());
+            }
+            this.executions.get(notebookUri.toString())?.set(cellHandle, execution);
             execution.initialize();
             this.onDidChangeExecutionEmitter.fire(new CellExecutionStateChangedEvent(notebookUri, cellHandle, execution));
         }
@@ -116,20 +102,20 @@ export class NotebookExecutionStateService implements Disposable {
     private createNotebookCellExecution(notebook: NotebookModel, cellHandle: number): CellExecution {
         const notebookUri = notebook.uri;
         const execution = new CellExecution(cellHandle, notebook);
-        execution.onDidUpdate(() => this.onDidChangeExecutionEmitter.fire(new CellExecutionStateChangedEvent(notebookUri, cellHandle, execution)));
-        execution.onDidComplete(lastRunSuccess => this.onCellExecutionDidComplete(notebookUri, cellHandle, execution, lastRunSuccess));
+        execution.toDispose.push(execution.onDidUpdate(() => this.onDidChangeExecutionEmitter.fire(new CellExecutionStateChangedEvent(notebookUri, cellHandle, execution))));
+        execution.toDispose.push(execution.onDidComplete(lastRunSuccess => this.onCellExecutionDidComplete(notebookUri, cellHandle, execution, lastRunSuccess)));
 
         return execution;
     }
 
     private onCellExecutionDidComplete(notebookUri: URI, cellHandle: number, exe: CellExecution, lastRunSuccess?: boolean): void {
-        const notebookExecutions = this.executions.get(`${notebookUri}/${cellHandle}`);
+        const notebookExecutions = this.executions.get(notebookUri.toString())?.get(cellHandle);
         if (!notebookExecutions) {
-            return;
+            throw new Error('Notebook Cell Execution not found while trying to complete it');
         }
 
         exe.dispose();
-        this.executions.delete(`${notebookUri}/${cellHandle}`);
+        this.executions.get(notebookUri.toString())?.delete(cellHandle);
 
         this.onDidChangeExecutionEmitter.fire(new CellExecutionStateChangedEvent(notebookUri, cellHandle));
     }
@@ -140,14 +126,14 @@ export class NotebookExecutionStateService implements Disposable {
             throw new Error(`Not a cell URI: ${cellUri}`);
         }
 
-        return this.executions.get(`${parsed.notebook.toString()}/${parsed.handle}`);
+        return this.executions.get(parsed.notebook.toString())?.get(parsed.handle);
     }
 
     dispose(): void {
         this.onDidChangeExecutionEmitter.dispose();
         this.onDidChangeLastRunFailStateEmitter.dispose();
 
-        this.executions.forEach(cellExecution => cellExecution.dispose());
+        this.executions.forEach(notebookExecutions => notebookExecutions.forEach(execution => execution.dispose()));
     }
 
 }
@@ -158,6 +144,8 @@ export class CellExecution implements Disposable {
 
     private readonly onDidCompleteEmitter = new Emitter<boolean | undefined>();
     readonly onDidComplete = this.onDidCompleteEmitter.event;
+
+    toDispose = new DisposableCollection();
 
     private _state: NotebookCellExecutionState = NotebookCellExecutionState.Unconfirmed;
     get state(): NotebookCellExecutionState {
@@ -198,7 +186,7 @@ export class CellExecution implements Disposable {
                 renderDuration: undefined,
             }
         };
-        this.applyExecutionEdits([startExecuteEdit]);
+        this.applyCellExecutionEditsToNotebook([startExecuteEdit]);
     }
 
     private getCellLog(): string {
@@ -221,7 +209,7 @@ export class CellExecution implements Disposable {
 
         const lastIsPausedUpdate = [...updates].reverse().find(u => u.editType === CellExecutionUpdateType.ExecutionState && typeof u.isPaused === 'boolean');
         if (lastIsPausedUpdate) {
-            this._isPaused = (lastIsPausedUpdate as ICellExecutionStateUpdate).isPaused!;
+            this._isPaused = (lastIsPausedUpdate as CellExecutionStateUpdate).isPaused!;
         }
 
         const cellModel = this.notebook.cells.find(c => c.handle === this.cellHandle);
@@ -229,7 +217,7 @@ export class CellExecution implements Disposable {
             console.debug(`CellExecution#update, updating cell not in notebook: ${this.notebook.uri.toString()}, ${this.cellHandle}`);
         } else {
             const edits = updates.map(update => updateToEdit(update, this.cellHandle));
-            this.applyExecutionEdits(edits);
+            this.applyCellExecutionEditsToNotebook(edits);
         }
 
         if (updates.some(u => u.editType === CellExecutionUpdateType.ExecutionState)) {
@@ -254,7 +242,7 @@ export class CellExecution implements Disposable {
                     runEndTime: this._didPause ? null : completionData.runEndTime,
                 }
             };
-            this.applyExecutionEdits([edit]);
+            this.applyCellExecutionEditsToNotebook([edit]);
         }
 
         this.onDidCompleteEmitter.fire(completionData.lastRunSuccess);
@@ -264,9 +252,10 @@ export class CellExecution implements Disposable {
     dispose(): void {
         this.onDidUpdateEmitter.dispose();
         this.onDidCompleteEmitter.dispose();
+        this.toDispose.dispose();
     }
 
-    private applyExecutionEdits(edits: CellEditOperation[]): void {
+    private applyCellExecutionEditsToNotebook(edits: CellEditOperation[]): void {
         this.notebook.applyEdits(edits, false);
     }
 }
@@ -301,6 +290,7 @@ export function updateToEdit(update: CellExecuteUpdate, cellHandle: number): Cel
         return {
             editType: CellEditType.OutputItems,
             items: update.items,
+            outputId: update.outputId,
             append: update.append,
         };
     } else if (update.editType === CellExecutionUpdateType.ExecutionState) {

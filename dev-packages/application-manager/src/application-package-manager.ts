@@ -73,10 +73,12 @@ export class ApplicationPackageManager {
     }
 
     async clean(): Promise<void> {
+        const webpackGenerator = new WebpackGenerator(this.pck);
         await Promise.all([
             this.remove(this.pck.lib()),
             this.remove(this.pck.srcGen()),
-            this.remove(new WebpackGenerator(this.pck).genConfigPath)
+            this.remove(webpackGenerator.genConfigPath),
+            this.remove(webpackGenerator.genNodeConfigPath)
         ]);
     }
 
@@ -137,7 +139,7 @@ export class ApplicationPackageManager {
             console.warn(
                 `WARNING: ${this.pck.packagePath} does not have a "main" entry.\n` +
                 'Please add the following line:\n' +
-                '    "main": "src-gen/frontend/electron-main.js"'
+                '    "main": "lib/backend/electron-main.js"'
             );
         }
 

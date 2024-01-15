@@ -20,15 +20,18 @@
 
 import { Disposable, DisposableCollection, Emitter, Event, URI } from '@theia/core';
 import { inject, injectable, interfaces, postConstruct } from '@theia/core/shared/inversify';
+import { ContextKeyChangeEvent } from '@theia/core/lib/browser/context-key-service';
 import { MonacoEditorModel } from '@theia/monaco/lib/browser/monaco-editor-model';
 import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
 import {
-    CellInternalMetadataChangedEvent, CellKind, NotebookCellCollapseState, NotebookCellInternalMetadata,
-    NotebookCellMetadata, NotebookCellOutputsSplice, CellOutput, CellData, NotebookCell
+    CellKind, NotebookCellCollapseState, NotebookCellInternalMetadata,
+    NotebookCellMetadata, CellOutput, CellData, CellOutputItem
 } from '../../common';
+import { NotebookCellOutputsSplice } from '../notebook-types';
 import { NotebookCellOutputModel } from './notebook-cell-output-model';
 
 export const NotebookCellModelFactory = Symbol('NotebookModelFactory');
+export type NotebookCellModelFactory = (props: NotebookCellModelProps) => NotebookCellModel;
 
 export function createNotebookCellModelContainer(parent: interfaces.Container, props: NotebookCellModelProps,
     notebookCellContextManager: new (...args: never[]) => unknown): interfaces.Container {
@@ -46,7 +49,28 @@ const NotebookCellContextManager = Symbol('NotebookCellContextManager');
 interface NotebookCellContextManager {
     updateCellContext(cell: NotebookCellModel, context: HTMLElement): void;
     dispose(): void;
-    onDidChangeContext: Event<void>;
+    onDidChangeContext: Event<ContextKeyChangeEvent>;
+}
+
+export interface CellInternalMetadataChangedEvent {
+    readonly lastRunSuccessChanged?: boolean;
+}
+
+export interface NotebookCell {
+    readonly uri: URI;
+    handle: number;
+    language: string;
+    cellKind: CellKind;
+    outputs: CellOutput[];
+    metadata: NotebookCellMetadata;
+    internalMetadata: NotebookCellInternalMetadata;
+    text: string;
+    onDidChangeOutputs?: Event<NotebookCellOutputsSplice>;
+    onDidChangeOutputItems?: Event<CellOutput>;
+    onDidChangeLanguage: Event<string>;
+    onDidChangeMetadata: Event<void>;
+    onDidChangeInternalMetadata: Event<CellInternalMetadataChangedEvent>;
+
 }
 
 const NotebookCellModelProps = Symbol('NotebookModelProps');
@@ -69,8 +93,8 @@ export class NotebookCellModel implements NotebookCell, Disposable {
     protected readonly onDidChangeOutputsEmitter = new Emitter<NotebookCellOutputsSplice>();
     readonly onDidChangeOutputs: Event<NotebookCellOutputsSplice> = this.onDidChangeOutputsEmitter.event;
 
-    protected readonly onDidChangeOutputItemsEmitter = new Emitter<void>();
-    readonly onDidChangeOutputItems: Event<void> = this.onDidChangeOutputItemsEmitter.event;
+    protected readonly onDidChangeOutputItemsEmitter = new Emitter<CellOutput>();
+    readonly onDidChangeOutputItems: Event<CellOutput> = this.onDidChangeOutputItemsEmitter.event;
 
     protected readonly onDidChangeContentEmitter = new Emitter<'content' | 'language' | 'mime'>();
     readonly onDidChangeContent: Event<'content' | 'language' | 'mime'> = this.onDidChangeContentEmitter.event;
@@ -134,7 +158,7 @@ export class NotebookCellModel implements NotebookCell, Disposable {
         return this.htmlContext;
     }
 
-    get textBuffer(): string {
+    get text(): string {
         return this.textModel ? this.textModel.getText() : this.source;
     }
 
@@ -143,6 +167,7 @@ export class NotebookCellModel implements NotebookCell, Disposable {
     }
     set source(source: string) {
         this.props.source = source;
+        this.textModel?.textEditorModel.setValue(source);
     }
     get language(): string {
         return this.props.language;
@@ -215,7 +240,7 @@ export class NotebookCellModel implements NotebookCell, Disposable {
                 const currentOutput = this.outputs[splice.start + i];
                 const newOutput = splice.newOutputs[i];
 
-                this.replaceOutputItems(currentOutput.outputId, newOutput);
+                this.replaceOutputData(currentOutput.outputId, newOutput);
             }
 
             this.outputs.splice(splice.start + commonLen, splice.deleteCount - commonLen, ...splice.newOutputs.slice(commonLen).map(op => new NotebookCellOutputModel(op)));
@@ -226,15 +251,31 @@ export class NotebookCellModel implements NotebookCell, Disposable {
         }
     }
 
-    replaceOutputItems(outputId: string, newOutputItem: CellOutput): boolean {
+    replaceOutputData(outputId: string, newOutputData: CellOutput): boolean {
         const output = this.outputs.find(out => out.outputId === outputId);
 
         if (!output) {
             return false;
         }
 
-        output.replaceData(newOutputItem);
-        this.onDidChangeOutputItemsEmitter.fire();
+        output.replaceData(newOutputData);
+        this.onDidChangeOutputItemsEmitter.fire(output);
+        return true;
+    }
+
+    changeOutputItems(outputId: string, append: boolean, items: CellOutputItem[]): boolean {
+        const output = this.outputs.find(out => out.outputId === outputId);
+
+        if (!output) {
+            return false;
+        }
+
+        if (append) {
+            output.appendData(items);
+        } else {
+            output.replaceData({ outputId: outputId, outputs: items, metadata: output.metadata });
+        }
+        this.onDidChangeOutputItemsEmitter.fire(output);
         return true;
     }
 
@@ -243,7 +284,7 @@ export class NotebookCellModel implements NotebookCell, Disposable {
             cellKind: this.cellKind,
             language: this.language,
             outputs: this.outputs.map(output => output.getData()),
-            source: this.textBuffer,
+            source: this.text,
             collapseState: this.props.collapseState,
             internalMetadata: this.internalMetadata,
             metadata: this.metadata
@@ -257,6 +298,9 @@ export class NotebookCellModel implements NotebookCell, Disposable {
 
         const ref = await this.textModelService.createModelReference(this.uri);
         this.textModel = ref.object;
+        this.textModel.onDidChangeContent(e => {
+            this.props.source = e.model.getText();
+        });
         return ref.object;
     }
 }

@@ -30,16 +30,16 @@ import { NotebookCellActionContribution } from './contributions/notebook-cell-ac
 import { NotebookCellToolbarFactory } from './view/notebook-cell-toolbar-factory';
 import { createNotebookModelContainer, NotebookModel, NotebookModelFactory, NotebookModelProps } from './view-model/notebook-model';
 import { createNotebookCellModelContainer, NotebookCellModel, NotebookCellModelFactory, NotebookCellModelProps } from './view-model/notebook-cell-model';
-import { createNotebookEditorWidgetContainer, NotebookEditorContainerFactory, NotebookEditorProps, NotebookEditorWidget } from './notebook-editor-widget';
+import { createNotebookEditorWidgetContainer, NotebookEditorWidgetContainerFactory, NotebookEditorProps, NotebookEditorWidget } from './notebook-editor-widget';
 import { NotebookCodeCellRenderer } from './view/notebook-code-cell-view';
 import { NotebookMarkdownCellRenderer } from './view/notebook-markdown-cell-view';
 import { NotebookActionsContribution } from './contributions/notebook-actions-contribution';
 import { NotebookExecutionService } from './service/notebook-execution-service';
 import { NotebookExecutionStateService } from './service/notebook-execution-state-service';
 import { NotebookKernelService } from './service/notebook-kernel-service';
-import { KernelPickerMRUStrategy, NotebookKernelQuickPickService } from './service/notebook-kernel-quick-pick-service';
+import { NotebookKernelQuickPickService } from './service/notebook-kernel-quick-pick-service';
 import { NotebookKernelHistoryService } from './service/notebook-kernel-history-service';
-import { NotebookEditorWidgetService } from './service/notebook-editor-service';
+import { NotebookEditorWidgetService } from './service/notebook-editor-widget-service';
 import { NotebookRendererMessagingService } from './service/notebook-renderer-messaging-service';
 import { NotebookColorContribution } from './contributions/notebook-color-contribution';
 import { NotebookCellContextManager } from './service/notebook-cell-context-manager';
@@ -65,7 +65,7 @@ export default new ContainerModule(bind => {
     bind(NotebookKernelService).toSelf().inSingletonScope();
     bind(NotebookRendererMessagingService).toSelf().inSingletonScope();
     bind(NotebookKernelHistoryService).toSelf().inSingletonScope();
-    bind(NotebookKernelQuickPickService).to(KernelPickerMRUStrategy).inSingletonScope();
+    bind(NotebookKernelQuickPickService).toSelf().inSingletonScope();
 
     bind(NotebookCellResourceResolver).toSelf().inSingletonScope();
     bind(ResourceResolver).toService(NotebookCellResourceResolver);
@@ -83,7 +83,7 @@ export default new ContainerModule(bind => {
     bind(NotebookMarkdownCellRenderer).toSelf().inSingletonScope();
     bind(NotebookMainToolbarRenderer).toSelf().inSingletonScope();
 
-    bind(NotebookEditorContainerFactory).toFactory(ctx => (props: NotebookEditorProps) =>
+    bind(NotebookEditorWidgetContainerFactory).toFactory(ctx => (props: NotebookEditorProps) =>
         createNotebookEditorWidgetContainer(ctx.container, props).get(NotebookEditorWidget)
     );
     bind(NotebookModelFactory).toFactory(ctx => (props: NotebookModelProps) =>

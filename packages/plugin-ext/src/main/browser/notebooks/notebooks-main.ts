@@ -14,9 +14,9 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import { CancellationToken, DisposableCollection, Emitter } from '@theia/core';
+import { CancellationToken, DisposableCollection, Emitter, Event } from '@theia/core';
 import { BinaryBuffer } from '@theia/core/lib/common/buffer';
-import { NotebookCellStatusBarItemList, NotebookCellStatusBarItemProvider, NotebookData, NotebookExtensionDescription, TransientOptions } from '@theia/notebook/lib/common';
+import { NotebookCellStatusBarItem, NotebookData, TransientOptions } from '@theia/notebook/lib/common';
 import { NotebookService } from '@theia/notebook/lib/browser';
 import { Disposable } from '@theia/plugin';
 import { MAIN_RPC_CONTEXT, NotebooksExt, NotebooksMain } from '../../../common';
@@ -24,6 +24,17 @@ import { RPCProtocol } from '../../../common/rpc-protocol';
 import { NotebookDto } from './notebook-dto';
 import { UriComponents } from '@theia/core/lib/common/uri';
 import { HostedPluginSupport } from '../../../hosted/browser/hosted-plugin';
+
+export interface NotebookCellStatusBarItemList {
+    items: NotebookCellStatusBarItem[];
+    dispose?(): void;
+}
+
+export interface NotebookCellStatusBarItemProvider {
+    viewType: string;
+    onDidChangeStatusBarItems?: Event<void>;
+    provideCellStatusBarItems(uri: UriComponents, index: number, token: CancellationToken): Promise<NotebookCellStatusBarItemList | undefined>;
+}
 
 export class NotebooksMainImpl implements NotebooksMain {
 
@@ -39,7 +50,7 @@ export class NotebooksMainImpl implements NotebooksMain {
         plugins: HostedPluginSupport
     ) {
         this.proxy = rpc.getProxy(MAIN_RPC_CONTEXT.NOTEBOOKS_EXT);
-        notebookService.onNotebookSerializer(async event => plugins.activateByEvent(event));
+        notebookService.onWillUseNotebookSerializer(async event => plugins.activateByNotebookSerializer(event));
         notebookService.markReady();
     }
 
@@ -50,16 +61,16 @@ export class NotebooksMainImpl implements NotebooksMain {
         }
     }
 
-    $registerNotebookSerializer(handle: number, extension: NotebookExtensionDescription, viewType: string, options: TransientOptions): void {
+    $registerNotebookSerializer(handle: number, viewType: string, options: TransientOptions): void {
         const disposables = new DisposableCollection();
 
-        disposables.push(this.notebookService.registerNotebookSerializer(viewType, extension, {
+        disposables.push(this.notebookService.registerNotebookSerializer(viewType, {
             options,
-            dataToNotebook: async (data: BinaryBuffer): Promise<NotebookData> => {
+            toNotebook: async (data: BinaryBuffer): Promise<NotebookData> => {
                 const dto = await this.proxy.$dataToNotebook(handle, data, CancellationToken.None);
                 return NotebookDto.fromNotebookDataDto(dto);
             },
-            notebookToData: (data: NotebookData): Promise<BinaryBuffer> =>
+            fromNotebook: (data: NotebookData): Promise<BinaryBuffer> =>
                 this.proxy.$notebookToData(handle, NotebookDto.toNotebookDataDto(data), CancellationToken.None)
 
         }));

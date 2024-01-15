@@ -17,18 +17,16 @@
 import { Disposable, Emitter, URI } from '@theia/core';
 import { Saveable, SaveOptions } from '@theia/core/lib/browser';
 import {
-    CellData,
-    CellEditOperation, CellEditType, CellUri, NotebookCellInternalMetadata,
+    CellData, CellEditType, CellUri, NotebookCellInternalMetadata,
     NotebookCellsChangeType, NotebookCellTextModelSplice, NotebookData,
-    NotebookDocumentMetadata, NotebookModelWillAddRemoveEvent,
-    NotebookTextModelChangedEvent, NullablePartialNotebookCellInternalMetadata
+    NotebookDocumentMetadata,
 } from '../../common';
+import { NotebookContentChangedEvent, NotebookModelWillAddRemoveEvent, CellEditOperation, NullablePartialNotebookCellInternalMetadata } from '../notebook-types';
 import { NotebookSerializer } from '../service/notebook-service';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
-import { NotebookCellModel, NotebookCellModelFactory, NotebookCellModelProps } from './notebook-cell-model';
+import { NotebookCellModel, NotebookCellModelFactory } from './notebook-cell-model';
 import { MonacoTextModelService } from '@theia/monaco/lib/browser/monaco-text-model-service';
-import { inject, injectable, interfaces } from '@theia/core/shared/inversify';
-import { NotebookKernel } from '../service/notebook-kernel-service';
+import { inject, injectable, interfaces, postConstruct } from '@theia/core/shared/inversify';
 import { UndoRedoService } from '@theia/editor/lib/browser/undo-redo-service';
 
 export const NotebookModelFactory = Symbol('NotebookModelFactory');
@@ -53,33 +51,49 @@ export interface NotebookModelProps {
 @injectable()
 export class NotebookModel implements Saveable, Disposable {
 
-    private readonly onDirtyChangedEmitter = new Emitter<void>();
+    protected readonly onDirtyChangedEmitter = new Emitter<void>();
     readonly onDirtyChanged = this.onDirtyChangedEmitter.event;
 
-    private readonly onDidSaveNotebookEmitter = new Emitter<void>();
+    protected readonly onDidSaveNotebookEmitter = new Emitter<void>();
     readonly onDidSaveNotebook = this.onDidSaveNotebookEmitter.event;
 
-    private readonly onDidAddOrRemoveCellEmitter = new Emitter<NotebookModelWillAddRemoveEvent>();
+    protected readonly onDidAddOrRemoveCellEmitter = new Emitter<NotebookModelWillAddRemoveEvent>();
     readonly onDidAddOrRemoveCell = this.onDidAddOrRemoveCellEmitter.event;
 
-    private readonly onDidChangeContentEmitter = new Emitter<NotebookTextModelChangedEvent>();
+    protected readonly onDidChangeContentEmitter = new Emitter<NotebookContentChangedEvent[]>();
     readonly onDidChangeContent = this.onDidChangeContentEmitter.event;
 
     @inject(FileService)
-    private readonly fileService: FileService;
+    protected readonly fileService: FileService;
 
     @inject(UndoRedoService)
-    private readonly undoRedoService: UndoRedoService;
+    protected readonly undoRedoService: UndoRedoService;
 
+    @inject(NotebookModelProps)
+    protected props: NotebookModelProps;
+
+    @inject(MonacoTextModelService)
+    protected modelService: MonacoTextModelService;
+
+    @inject(NotebookCellModelFactory)
+    protected cellModelFactory: NotebookCellModelFactory;
     readonly autoSave: 'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange';
 
-    nextHandle: number = 0;
+    protected nextHandle: number = 0;
 
-    kernel?: NotebookKernel;
+    protected _dirty: boolean = false;
 
-    dirty: boolean;
+    set dirty(dirty: boolean) {
+        this._dirty = dirty;
+        this.onDirtyChangedEmitter.fire();
+    }
+
+    get dirty(): boolean {
+        return this._dirty;
+    }
+
     selectedCell?: NotebookCellModel;
-    private dirtyCells: NotebookCellModel[] = [];
+    protected dirtyCells: NotebookCellModel[] = [];
 
     cells: NotebookCellModel[];
 
@@ -93,13 +107,12 @@ export class NotebookModel implements Saveable, Disposable {
 
     metadata: NotebookDocumentMetadata = {};
 
-    constructor(@inject(NotebookModelProps) private props: NotebookModelProps,
-        @inject(MonacoTextModelService) modelService: MonacoTextModelService,
-        @inject(NotebookCellModelFactory) private cellModelFactory: (props: NotebookCellModelProps) => NotebookCellModel) {
+    @postConstruct()
+    initialize(): void {
         this.dirty = false;
 
-        this.cells = props.data.cells.map((cell, index) => cellModelFactory({
-            uri: CellUri.generate(props.uri, index),
+        this.cells = this.props.data.cells.map((cell, index) => this.cellModelFactory({
+            uri: CellUri.generate(this.props.uri, index),
             handle: index,
             source: cell.source,
             language: cell.language,
@@ -114,18 +127,6 @@ export class NotebookModel implements Saveable, Disposable {
 
         this.metadata = this.metadata;
 
-        modelService.onDidCreate(editorModel => {
-            const modelUri = new URI(editorModel.uri);
-            if (modelUri.scheme === CellUri.scheme) {
-                const cellUri = CellUri.parse(modelUri);
-                if (cellUri && cellUri.notebook.isEqual(this.uri)) {
-                    const cell = this.cells.find(c => c.handle === cellUri.handle);
-                    if (cell) {
-                        cell.textModel = editorModel;
-                    }
-                }
-            }
-        });
         this.nextHandle = this.cells.length;
     }
 
@@ -140,9 +141,8 @@ export class NotebookModel implements Saveable, Disposable {
     async save(options: SaveOptions): Promise<void> {
         this.dirtyCells = [];
         this.dirty = false;
-        this.onDirtyChangedEmitter.fire();
 
-        const serializedNotebook = await this.props.serializer.notebookToData({
+        const serializedNotebook = await this.props.serializer.fromNotebook({
             cells: this.cells.map(cell => cell.getData()),
             metadata: this.metadata
         });
@@ -163,9 +163,34 @@ export class NotebookModel implements Saveable, Disposable {
         };
     }
 
+    async applySnapshot(snapshot: Saveable.Snapshot): Promise<void> {
+        const rawData = 'read' in snapshot ? snapshot.read() : snapshot.value;
+        if (!rawData) {
+            throw new Error('could not read notebook snapshot');
+        }
+        const data = JSON.parse(rawData);
+        const cells = data.cells.map((cell: CellData, index: number) => {
+            const handle = this.nextHandle++;
+            return this.cellModelFactory({
+                uri: CellUri.generate(this.uri, handle),
+                handle: handle,
+                source: cell.source,
+                language: cell.language,
+                cellKind: cell.cellKind,
+                outputs: cell.outputs,
+                metadata: cell.metadata,
+                internalMetadata: cell.internalMetadata,
+                collapseState: cell.collapseState
+            });
+        });
+        this.addCellOutputListeners(cells);
+
+        this.metadata = data.metadata;
+
+    }
+
     async revert(options?: Saveable.RevertOptions): Promise<void> {
         this.dirty = false;
-        this.onDirtyChangedEmitter.fire();
     }
 
     isDirty(): boolean {
@@ -179,8 +204,8 @@ export class NotebookModel implements Saveable, Disposable {
             this.dirtyCells.splice(this.dirtyCells.indexOf(cell), 1);
         }
 
-        const oldDirtyState = this.dirty;
-        this.dirty = this.dirtyCells.length > 0;
+        const oldDirtyState = this._dirty;
+        this._dirty = this.dirtyCells.length > 0;
         if (this.dirty !== oldDirtyState) {
             this.onDirtyChangedEmitter.fire();
         }
@@ -204,7 +229,6 @@ export class NotebookModel implements Saveable, Disposable {
         for (const cell of cells) {
             cell.onDidChangeOutputs(() => {
                 this.dirty = true;
-                this.onDirtyChangedEmitter.fire();
             });
         }
     }
@@ -216,6 +240,8 @@ export class NotebookModel implements Saveable, Disposable {
                 cellIndex = edit.index;
             } else if ('handle' in edit) {
                 cellIndex = this.getCellIndexByHandle(edit.handle);
+            } else if ('outputId' in edit) {
+                cellIndex = this.cells.findIndex(cell => cell.outputs.some(output => output.outputId === edit.outputId));
             }
 
             return {
@@ -247,6 +273,7 @@ export class NotebookModel implements Saveable, Disposable {
                     break;
                 }
                 case CellEditType.OutputItems:
+                    cell.changeOutputItems(edit.outputId, !!edit.append, edit.items);
                     break;
                 case CellEditType.Metadata:
                     this.updateNotebookMetadata(edit.metadata, computeUndoRedo);
@@ -284,7 +311,7 @@ export class NotebookModel implements Saveable, Disposable {
         });
         this.addCellOutputListeners(cells);
 
-        const changes: NotebookCellTextModelSplice<NotebookCellModel>[] = [[start, deleteCount, cells]];
+        const changes: NotebookCellTextModelSplice<NotebookCellModel>[] = [{ start, deleteCount, newItems: cells }];
 
         const deletedCells = this.cells.splice(start, deleteCount, ...cells);
 
@@ -298,8 +325,8 @@ export class NotebookModel implements Saveable, Disposable {
                 async () => this.replaceCells(start, deleteCount, newCells, false));
         }
 
-        this.onDidAddOrRemoveCellEmitter.fire({ rawEvent: { kind: NotebookCellsChangeType.ModelChange, changes } });
-        this.onDidChangeContentEmitter.fire({ rawEvents: [{ kind: NotebookCellsChangeType.ModelChange, changes }] });
+        this.onDidAddOrRemoveCellEmitter.fire({ rawEvent: { kind: NotebookCellsChangeType.ModelChange, changes }, newCellIds: cells.map(cell => cell.handle) });
+        this.onDidChangeContentEmitter.fire([{ kind: NotebookCellsChangeType.ModelChange, changes }]);
     }
 
     private changeCellInternalMetadataPartial(cell: NotebookCellModel, internalMetadata: NullablePartialNotebookCellInternalMetadata): void {
@@ -313,11 +340,9 @@ export class NotebookModel implements Saveable, Disposable {
         }
 
         cell.internalMetadata = newInternalMetadata;
-        this.onDidChangeContentEmitter.fire({
-            rawEvents: [
-                { kind: NotebookCellsChangeType.ChangeCellInternalMetadata, index: this.cells.indexOf(cell), internalMetadata: newInternalMetadata }
-            ]
-        });
+        this.onDidChangeContentEmitter.fire([
+            { kind: NotebookCellsChangeType.ChangeCellInternalMetadata, index: this.cells.indexOf(cell), internalMetadata: newInternalMetadata }
+        ]);
     }
 
     private updateNotebookMetadata(metadata: NotebookDocumentMetadata, computeUndoRedo: boolean): void {
@@ -330,10 +355,7 @@ export class NotebookModel implements Saveable, Disposable {
         }
 
         this.metadata = metadata;
-        this.onDidChangeContentEmitter.fire({
-            rawEvents: [{ kind: NotebookCellsChangeType.ChangeDocumentMetadata, metadata: this.metadata }],
-            synchronous: true,
-        });
+        this.onDidChangeContentEmitter.fire([{ kind: NotebookCellsChangeType.ChangeDocumentMetadata, metadata: this.metadata }]);
     }
 
     private changeCellLanguage(cell: NotebookCellModel, languageId: string, computeUndoRedo: boolean): void {
@@ -343,10 +365,7 @@ export class NotebookModel implements Saveable, Disposable {
 
         cell.language = languageId;
 
-        this.onDidChangeContentEmitter.fire({
-            rawEvents: [{ kind: NotebookCellsChangeType.ChangeCellLanguage, index: this.cells.indexOf(cell), language: languageId }],
-            synchronous: true,
-        });
+        this.onDidChangeContentEmitter.fire([{ kind: NotebookCellsChangeType.ChangeCellLanguage, index: this.cells.indexOf(cell), language: languageId }]);
     }
 
     private moveCellToIndex(fromIndex: number, length: number, toIndex: number, computeUndoRedo: boolean): boolean {
@@ -359,9 +378,7 @@ export class NotebookModel implements Saveable, Disposable {
 
         const cells = this.cells.splice(fromIndex, length);
         this.cells.splice(toIndex, 0, ...cells);
-        this.onDidChangeContentEmitter.fire({
-            rawEvents: [{ kind: NotebookCellsChangeType.Move, index: fromIndex, length, newIdx: toIndex, cells }],
-        });
+        this.onDidChangeContentEmitter.fire([{ kind: NotebookCellsChangeType.Move, index: fromIndex, length, newIdx: toIndex, cells }]);
 
         return true;
     }

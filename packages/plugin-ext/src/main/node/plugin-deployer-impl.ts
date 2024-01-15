@@ -75,9 +75,9 @@ export class PluginDeployerImpl implements PluginDeployer {
     @inject(ContributionProvider) @named(PluginDeployerParticipant)
     protected readonly participants: ContributionProvider<PluginDeployerParticipant>;
 
-    public start(): void {
+    public start(): Promise<void> {
         this.logger.debug('Starting the deployer with the list of resolvers', this.pluginResolvers);
-        this.doStart();
+        return this.doStart();
     }
 
     public async initResolvers(): Promise<Array<void>> {
@@ -130,8 +130,9 @@ export class PluginDeployerImpl implements PluginDeployer {
             id,
             type: PluginType.System
         }));
+        const resolvePlugins = this.measure('resolvePlugins');
         const plugins = await this.resolvePlugins([...unresolvedUserEntries, ...unresolvedSystemEntries]);
-        deployPlugins.log('Resolve plugins list');
+        resolvePlugins.log('Resolve plugins list');
         await this.deployPlugins(plugins);
         deployPlugins.log('Deploy plugins list');
     }

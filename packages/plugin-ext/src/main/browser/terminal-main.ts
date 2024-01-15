@@ -18,12 +18,12 @@ import { interfaces } from '@theia/core/shared/inversify';
 import { ApplicationShell, WidgetOpenerOptions } from '@theia/core/lib/browser';
 import { TerminalEditorLocationOptions, TerminalOptions } from '@theia/plugin';
 import { TerminalLocation, TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
+import { TerminalProfileService } from '@theia/terminal/lib/browser/terminal-profile-service';
 import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
 import { TerminalServiceMain, TerminalServiceExt, MAIN_RPC_CONTEXT } from '../../common/plugin-api-rpc';
 import { RPCProtocol } from '../../common/rpc-protocol';
 import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
-import { SerializableEnvironmentVariableCollection, SerializableExtensionEnvironmentVariableCollection } from '@theia/terminal/lib/common/base-terminal-protocol';
-import { ShellTerminalServerProxy } from '@theia/terminal/lib/common/shell-terminal-protocol';
+import { SerializableEnvironmentVariableCollection, ShellTerminalServerProxy } from '@theia/terminal/lib/common/shell-terminal-protocol';
 import { TerminalLink, TerminalLinkProvider } from '@theia/terminal/lib/browser/terminal-link-provider';
 import { URI } from '@theia/core/lib/common/uri';
 import { getIconClass } from '../../plugin/terminal-ext';
@@ -37,6 +37,7 @@ import { HostedPluginSupport } from '../../hosted/browser/hosted-plugin';
 export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLinkProvider, Disposable {
 
     private readonly terminals: TerminalService;
+    private readonly terminalProfileService: TerminalProfileService;
     private readonly pluginTerminalRegistry: PluginTerminalRegistry;
     private readonly hostedPluginSupport: HostedPluginSupport;
     private readonly shell: ApplicationShell;
@@ -48,6 +49,7 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
 
     constructor(rpc: RPCProtocol, container: interfaces.Container) {
         this.terminals = container.get(TerminalService);
+        this.terminalProfileService = container.get(TerminalProfileService);
         this.pluginTerminalRegistry = container.get(PluginTerminalRegistry);
         this.hostedPluginSupport = container.get(HostedPluginSupport);
         this.shell = container.get(ApplicationShell);
@@ -59,15 +61,16 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         }
         this.toDispose.push(this.terminals.onDidChangeCurrentTerminal(() => this.updateCurrentTerminal()));
         this.updateCurrentTerminal();
-        if (this.shellTerminalServer.collections.size > 0) {
-            const collectionAsArray = [...this.shellTerminalServer.collections.entries()];
-            const serializedCollections: [string, SerializableEnvironmentVariableCollection][] = collectionAsArray.map(e => [e[0], [...e[1].map.entries()]]);
-            this.extProxy.$initEnvironmentVariableCollections(serializedCollections);
-        }
+
+        this.shellTerminalServer.getEnvVarCollections().then(collections => this.extProxy.$initEnvironmentVariableCollections(collections));
 
         this.pluginTerminalRegistry.startCallback = id => this.startProfile(id);
 
         container.bind(TerminalLinkProvider).toDynamicValue(() => this);
+
+        this.toDispose.push(this.terminalProfileService.onDidChangeDefaultShell(shell => {
+            this.extProxy.$setShell(shell);
+        }));
     }
 
     async startProfile(id: string): Promise<string> {
@@ -75,11 +78,11 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         return this.extProxy.$startProfile(id, CancellationToken.None);
     }
 
-    $setEnvironmentVariableCollection(persistent: boolean, collection: SerializableExtensionEnvironmentVariableCollection): void {
-        if (collection.collection) {
-            this.shellTerminalServer.setCollection(collection.extensionIdentifier, persistent, collection.collection, collection.description);
+    $setEnvironmentVariableCollection(persistent: boolean, extensionIdentifier: string, rootUri: string, collection: SerializableEnvironmentVariableCollection): void {
+        if (collection) {
+            this.shellTerminalServer.setCollection(extensionIdentifier, rootUri, persistent, collection, collection.description);
         } else {
-            this.shellTerminalServer.deleteCollection(collection.extensionIdentifier);
+            this.shellTerminalServer.deleteCollection(extensionIdentifier);
         }
     }
 

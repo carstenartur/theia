@@ -69,7 +69,7 @@ import { LanguageService } from '@theia/monaco-editor-core/esm/vs/editor/common/
 import { Measurement, Stopwatch } from '@theia/core/lib/common';
 import { Uint8ArrayReadBuffer, Uint8ArrayWriteBuffer } from '@theia/core/lib/common/message-rpc/uint8-array-message-buffer';
 import { BasicChannel } from '@theia/core/lib/common/message-rpc/channel';
-import { NotebookTypeRegistry, NotebookService } from '@theia/notebook/lib/browser';
+import { NotebookTypeRegistry, NotebookService, NotebookRendererMessagingService } from '@theia/notebook/lib/browser';
 
 export type PluginHost = 'frontend' | string;
 export type DebugActivationEvent = 'onDebugResolve' | 'onDebugInitialConfigurations' | 'onDebugAdapterProtocolTracker' | 'onDebugDynamicConfigurations';
@@ -79,6 +79,30 @@ export const ALL_ACTIVATION_EVENT = '*';
 
 @injectable()
 export class HostedPluginSupport {
+
+    protected static ADDITIONAL_ACTIVATION_EVENTS_ENV = 'ADDITIONAL_ACTIVATION_EVENTS';
+    protected static BUILTIN_ACTIVATION_EVENTS = [
+        '*',
+        'onLanguage',
+        'onCommand',
+        'onDebug',
+        'onDebugInitialConfigurations',
+        'onDebugResolve',
+        'onDebugAdapterProtocolTracker',
+        'onDebugDynamicConfigurations',
+        'onTaskType',
+        'workspaceContains',
+        'onView',
+        'onUri',
+        'onTerminalProfile',
+        'onWebviewPanel',
+        'onFileSystem',
+        'onCustomEditor',
+        'onStartupFinished',
+        'onAuthenticationRequest',
+        'onNotebook',
+        'onNotebookSerializer'
+    ];
 
     protected readonly clientId = UUID.uuid4();
 
@@ -117,6 +141,9 @@ export class HostedPluginSupport {
 
     @inject(NotebookService)
     protected readonly notebookService: NotebookService;
+
+    @inject(NotebookRendererMessagingService)
+    protected readonly notebookRendererMessagingService: NotebookRendererMessagingService;
 
     @inject(CommandRegistry)
     protected readonly commands: CommandRegistry;
@@ -224,6 +251,7 @@ export class HostedPluginSupport {
         this.fileService.onWillActivateFileSystemProvider(event => this.ensureFileSystemActivation(event));
         this.customEditorRegistry.onWillOpenCustomEditor(event => this.activateByCustomEditor(event));
         this.notebookService.onWillOpenNotebook(async event => this.activateByNotebook(event));
+        this.notebookRendererMessagingService.onWillActivateRenderer(rendererId => this.activateByNotebookRenderer(rendererId));
 
         this.widgets.onDidCreateWidget(({ factoryId, widget }) => {
             if ((factoryId === WebviewWidget.FACTORY_ID || factoryId === CustomEditorWidget.FACTORY_ID) && widget instanceof WebviewWidget) {
@@ -373,8 +401,12 @@ export class HostedPluginSupport {
                 waitPluginsMeasurement.error('Backend deployment failed.');
             }
         }
-
-        syncPluginsMeasurement?.log(`Sync of ${this.getPluginCount(initialized)}`);
+        if (initialized > 0) {
+            // Only log sync measurement if there are were plugins to sync.
+            syncPluginsMeasurement?.log(`Sync of ${this.getPluginCount(initialized)}`);
+        } else {
+            syncPluginsMeasurement.stop();
+        }
     }
 
     /**
@@ -412,8 +444,12 @@ export class HostedPluginSupport {
                 }));
             }
         }
-
-        loadPluginsMeasurement.log(`Load contributions of ${this.getPluginCount(loaded)}`);
+        if (loaded > 0) {
+            // Only log load measurement if there are were plugins to load.
+            loadPluginsMeasurement?.log(`Load contributions of ${this.getPluginCount(loaded)}`);
+        } else {
+            loadPluginsMeasurement.stop();
+        }
 
         return hostContributions;
     }
@@ -484,7 +520,11 @@ export class HostedPluginSupport {
             return;
         }
 
-        startPluginsMeasurement.log(`Start of ${this.getPluginCount(started)}`);
+        if (started > 0) {
+            startPluginsMeasurement.log(`Start of ${this.getPluginCount(started)}`);
+        } else {
+            startPluginsMeasurement.stop();
+        }
     }
 
     protected async obtainManager(host: string, hostContributions: PluginContributions[], toDisconnect: DisposableCollection): Promise<PluginManagerExt | undefined> {
@@ -515,6 +555,13 @@ export class HostedPluginSupport {
             }
 
             const isElectron = environment.electron.is();
+
+            const supportedActivationEvents = [...HostedPluginSupport.BUILTIN_ACTIVATION_EVENTS];
+            const additionalActivationEvents = await this.envServer.getValue(HostedPluginSupport.ADDITIONAL_ACTIVATION_EVENTS_ENV);
+            if (additionalActivationEvents && additionalActivationEvents.value) {
+                additionalActivationEvents.value.split(',').forEach(event => supportedActivationEvents.push(event));
+            }
+
             await manager.$init({
                 preferences: getPreferences(this.preferenceProviderProvider, this.workspaceService.tryGetRoots()),
                 globalState,
@@ -532,11 +579,13 @@ export class HostedPluginSupport {
                     webviewResourceRoot,
                     webviewCspSource
                 },
-                jsonValidation
+                jsonValidation,
+                supportedActivationEvents
             });
             if (toDisconnect.disposed) {
                 return undefined;
             }
+            this.activationEvents.forEach(event => manager!.$activateByEvent(event));
         }
         return manager;
     }
@@ -631,6 +680,14 @@ export class HostedPluginSupport {
 
     async activateByNotebook(viewType: string): Promise<void> {
         await this.activateByEvent(`onNotebook:${viewType}`);
+    }
+
+    async activateByNotebookSerializer(viewType: string): Promise<void> {
+        await this.activateByEvent(`onNotebookSerializer:${viewType}`);
+    }
+
+    async activateByNotebookRenderer(rendererId: string): Promise<void> {
+        await this.activateByEvent(`onRenderer:${rendererId}`);
     }
 
     activateByFileSystem(event: FileSystemProviderActivationEvent): Promise<void> {

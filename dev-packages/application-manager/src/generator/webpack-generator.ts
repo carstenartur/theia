@@ -296,7 +296,14 @@ module.exports = [{
     stats: {
         warnings: true,
         children: true
-    }
+    },
+    ignoreWarnings: [
+        {
+            // Monaco uses 'require' in a non-standard way
+            module: /@theia\\/monaco-editor-core/,
+            message: /require function is used in a way in which dependencies cannot be statically extracted/
+        }
+    ]
 }${this.ifElectron(`, {
     mode,
     devtool: 'source-map',
@@ -386,6 +393,7 @@ if (process.platform !== 'win32') {
 
 const nativePlugin = new NativeWebpackPlugin({
     out: 'native',
+    trash: ${this.ifPackage('@theia/filesystem', 'true', 'false')},
     ripgrep: ${this.ifPackage(['@theia/search-in-workspace', '@theia/file-search'], 'true', 'false')},
     pty: ${this.ifPackage('@theia/process', 'true', 'false')},
     nativeBindings: {
@@ -449,7 +457,7 @@ const config = {
         ]
     },
     plugins: [
-        // Some native dependencies (bindings, @vscode/ripgrep) need special code replacements
+        // Some native dependencies need special handling
         nativePlugin,
         // Optional node dependencies can be safely ignored
         new webpack.IgnorePlugin({
@@ -469,6 +477,24 @@ const config = {
             })
         ]
     },
+    ignoreWarnings: [
+        // Some packages do not have source maps, that's ok
+        /Failed to parse source map/,
+        // Some packages use dynamic requires, we can safely ignore them (they are handled by the native webpack plugin)
+        /require function is used in a way in which dependencies cannot be statically extracted/, {
+            module: /yargs/
+        }, {
+            module: /node-pty/
+        }, {
+            module: /require-main-filename/
+        }, {
+            module: /ws/
+        }, {
+            module: /express/
+        }, {
+            module: /cross-spawn/
+        }
+    ]
 };
 
 module.exports = {

@@ -51,10 +51,6 @@ import { terminalAnsiColorMap } from './terminal-theme-service';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { FileStat } from '@theia/filesystem/lib/common/files';
 import { TerminalWatcher } from '../common/terminal-watcher';
-import {
-    ENVIRONMENT_VARIABLE_COLLECTIONS_KEY,
-    SerializableExtensionEnvironmentVariableCollection
-} from '../common/base-terminal-protocol';
 import { nls } from '@theia/core/lib/common/nls';
 import { Profiles, TerminalPreferences } from './terminal-preferences';
 import { ShellTerminalProfile } from './shell-terminal-profile';
@@ -172,6 +168,7 @@ export namespace TerminalCommands {
     });
 }
 
+const ENVIRONMENT_VARIABLE_COLLECTIONS_KEY = 'terminal.integrated.environmentVariableCollections';
 @injectable()
 export class TerminalFrontendContribution implements FrontendApplicationContribution, TerminalService, CommandContribution, MenuContribution,
     KeybindingContribution, TabBarToolbarContribution, ColorContribution {
@@ -252,8 +249,7 @@ export class TerminalFrontendContribution implements FrontendApplicationContribu
         this.terminalWatcher.onUpdateTerminalEnvVariablesRequested(() => {
             this.storageService.getData<string>(ENVIRONMENT_VARIABLE_COLLECTIONS_KEY).then(data => {
                 if (data) {
-                    const collectionsJson: SerializableExtensionEnvironmentVariableCollection[] = JSON.parse(data);
-                    collectionsJson.forEach(c => this.shellTerminalServer.setCollection(c.extensionIdentifier, true, c.collection ? c.collection : [], c.description));
+                    this.shellTerminalServer.restorePersisted(data);
                 }
             });
         });
@@ -641,7 +637,6 @@ export class TerminalFrontendContribution implements FrontendApplicationContribu
     }
 
     protected toggleTerminal(): void {
-
         const terminals = this.shell.getWidgets('bottom').filter(w => w instanceof TerminalWidget);
 
         if (terminals.length === 0) {
@@ -649,20 +644,17 @@ export class TerminalFrontendContribution implements FrontendApplicationContribu
             return;
         }
 
-        if (this.shell.bottomPanel.isHidden) {
-            this.shell.bottomPanel.setHidden(false);
+        if (!this.shell.isExpanded('bottom')) {
+            this.shell.expandPanel('bottom');
             terminals[0].activate();
-            return;
-        }
-
-        if (this.shell.bottomPanel.isVisible) {
+        } else {
             const visibleTerminal = terminals.find(t => t.isVisible);
             if (!visibleTerminal) {
                 this.shell.bottomPanel.activateWidget(terminals[0]);
             } else if (this.shell.activeWidget !== visibleTerminal) {
                 this.shell.bottomPanel.activateWidget(visibleTerminal);
             } else {
-                this.shell.bottomPanel.setHidden(true);
+                this.shell.collapsePanel('bottom');
             }
         }
 
@@ -998,7 +990,7 @@ export class TerminalFrontendContribution implements FrontendApplicationContribu
         if (!terminalProfile) {
             profile = this.profileService.defaultProfile;
             if (!profile) {
-                throw new Error('There are not profiles registered');
+                throw new Error('There are no profiles registered');
             }
         }
 

@@ -17,17 +17,18 @@
 import { DateTime } from 'luxon';
 import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import debounce = require('@theia/core/shared/lodash.debounce');
-import { CommandRegistry } from '@theia/core/lib/common/command';
+import { Command, CommandRegistry } from '@theia/core/lib/common/command';
 import { AbstractViewContribution } from '@theia/core/lib/browser/shell/view-contribution';
 import { VSXExtensionsViewContainer } from './vsx-extensions-view-container';
 import { VSXExtensionsModel } from './vsx-extensions-model';
 import { ColorContribution } from '@theia/core/lib/browser/color-application-contribution';
 import { ColorRegistry } from '@theia/core/lib/browser/color-registry';
 import { Color } from '@theia/core/lib/common/color';
-import { FrontendApplicationContribution, FrontendApplication } from '@theia/core/lib/browser/frontend-application';
+import { FrontendApplication } from '@theia/core/lib/browser/frontend-application';
+import { FrontendApplicationContribution } from '@theia/core/lib/browser/frontend-application-contribution';
 import { MenuModelRegistry, MessageService, nls } from '@theia/core/lib/common';
 import { FileDialogService, OpenFileDialogProps } from '@theia/filesystem/lib/browser';
-import { LabelProvider, PreferenceService, QuickPickItem, QuickInputService } from '@theia/core/lib/browser';
+import { LabelProvider, PreferenceService, QuickPickItem, QuickInputService, CommonMenus } from '@theia/core/lib/browser';
 import { VscodeCommands } from '@theia/plugin-ext-vscode/lib/browser/plugin-vscode-commands-contribution';
 import { VSXExtensionsContextMenu, VSXExtension } from './vsx-extension';
 import { ClipboardService } from '@theia/core/lib/browser/clipboard-service';
@@ -36,6 +37,12 @@ import { IGNORE_RECOMMENDATIONS_ID } from './recommended-extensions/recommended-
 import { VSXExtensionsCommands } from './vsx-extension-commands';
 import { VSXExtensionRaw, OVSXApiFilter } from '@theia/ovsx-client';
 import { OVSXClientProvider } from '../common/ovsx-client-provider';
+
+export namespace VSXCommands {
+    export const TOGGLE_EXTENSIONS: Command = {
+        id: 'vsxExtensions.toggle',
+    };
+}
 
 @injectable()
 export class VSXExtensionsContribution extends AbstractViewContribution<VSXExtensionsViewContainer> implements ColorContribution, FrontendApplicationContribution {
@@ -59,7 +66,7 @@ export class VSXExtensionsContribution extends AbstractViewContribution<VSXExten
                 area: 'left',
                 rank: 500
             },
-            toggleCommandId: 'vsxExtensions.toggle',
+            toggleCommandId: VSXCommands.TOGGLE_EXTENSIONS.id,
             toggleKeybinding: 'ctrlcmd+shift+x'
         });
     }
@@ -117,6 +124,11 @@ export class VSXExtensionsContribution extends AbstractViewContribution<VSXExten
 
     override registerMenus(menus: MenuModelRegistry): void {
         super.registerMenus(menus);
+        menus.registerMenuAction(CommonMenus.MANAGE_SETTINGS, {
+            commandId: VSXCommands.TOGGLE_EXTENSIONS.id,
+            label: nls.localizeByDefault('Extensions'),
+            order: 'a20'
+        });
         menus.registerMenuAction(VSXExtensionsContextMenu.COPY, {
             commandId: VSXExtensionsCommands.COPY.id,
             label: nls.localizeByDefault('Copy'),
@@ -169,6 +181,12 @@ export class VSXExtensionsContribution extends AbstractViewContribution<VSXExten
                     hcDark: Color.white,
                     hcLight: Color.black
                 }, description: 'Border color for a table row of the extension editor view'
+            },
+            {
+                id: 'extensionIcon.verifiedForeground', defaults: {
+                    dark: '#40a6ff',
+                    light: '#40a6ff'
+                }, description: 'The icon color for extension verified publisher.'
             },
         );
     }

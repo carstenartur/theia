@@ -18,9 +18,10 @@
 
 import debounce = require('lodash.debounce');
 import { injectable, inject, optional } from 'inversify';
-import { MAIN_MENU_BAR, SETTINGS_MENU, MenuContribution, MenuModelRegistry, ACCOUNTS_MENU } from '../common/menu';
+import { MAIN_MENU_BAR, MANAGE_MENU, MenuContribution, MenuModelRegistry, ACCOUNTS_MENU } from '../common/menu';
 import { KeybindingContribution, KeybindingRegistry } from './keybinding';
-import { FrontendApplication, FrontendApplicationContribution, OnWillStopAction } from './frontend-application';
+import { FrontendApplication } from './frontend-application';
+import { FrontendApplicationContribution, OnWillStopAction } from './frontend-application-contribution';
 import { CommandContribution, CommandRegistry, Command } from '../common/command';
 import { UriAwareCommandHandler } from '../common/uri-command-handler';
 import { SelectionService } from '../common/selection-service';
@@ -56,7 +57,7 @@ import { QuickInputService, QuickPickItem, QuickPickItemOrSeparator, QuickPickSe
 import { AsyncLocalizationProvider } from '../common/i18n/localization';
 import { nls } from '../common/nls';
 import { CurrentWidgetCommandAdapter } from './shell/current-widget-command-adapter';
-import { ConfirmDialog, confirmExitWithOrWithoutSaving, Dialog } from './dialogs';
+import { ConfirmDialog, confirmExit, ConfirmSaveDialog, Dialog } from './dialogs';
 import { WindowService } from './window/window-service';
 import { FrontendApplicationConfigProvider } from './frontend-application-config-provider';
 import { DecorationStyle } from './decoration-style';
@@ -100,8 +101,10 @@ export namespace CommonMenus {
     export const VIEW_LAYOUT = [...VIEW, '3_layout'];
     export const VIEW_TOGGLE = [...VIEW, '4_toggle'];
 
-    export const SETTINGS_OPEN = [...SETTINGS_MENU, '1_settings_open'];
-    export const SETTINGS__THEME = [...SETTINGS_MENU, '2_settings_theme'];
+    export const MANAGE_GENERAL = [...MANAGE_MENU, '1_manage_general'];
+    export const MANAGE_SETTINGS = [...MANAGE_MENU, '2_manage_settings'];
+    export const MANAGE_SETTINGS_THEMES = [...MANAGE_SETTINGS, '1_manage_settings_themes'];
+
     // last menu item
     export const HELP = [...MAIN_MENU_BAR, '9_help'];
 
@@ -113,6 +116,7 @@ export namespace CommonCommands {
     export const VIEW_CATEGORY = 'View';
     export const CREATE_CATEGORY = 'Create';
     export const PREFERENCES_CATEGORY = 'Preferences';
+    export const MANAGE_CATEGORY = 'Manage';
     export const FILE_CATEGORY_KEY = nls.getDefaultKey(FILE_CATEGORY);
     export const VIEW_CATEGORY_KEY = nls.getDefaultKey(VIEW_CATEGORY);
     export const PREFERENCES_CATEGORY_KEY = nls.getDefaultKey(PREFERENCES_CATEGORY);
@@ -347,14 +351,18 @@ export namespace CommonCommands {
     });
 }
 
-export const supportCut = browser.isNative || document.queryCommandSupported('cut');
-export const supportCopy = browser.isNative || document.queryCommandSupported('copy');
+export const supportCut = environment.electron.is() || document.queryCommandSupported('cut');
+export const supportCopy = environment.electron.is() || document.queryCommandSupported('copy');
 // Chrome incorrectly returns true for document.queryCommandSupported('paste')
 // when the paste feature is available but the calling script has insufficient
 // privileges to actually perform the action
-export const supportPaste = browser.isNative || (!browser.isChrome && document.queryCommandSupported('paste'));
+export const supportPaste = environment.electron.is() || (!browser.isChrome && document.queryCommandSupported('paste'));
 
 export const RECENT_COMMANDS_STORAGE_KEY = 'commands';
+
+export const CLASSNAME_OS_MAC = 'mac';
+export const CLASSNAME_OS_WINDOWS = 'windows';
+export const CLASSNAME_OS_LINUX = 'linux';
 
 @injectable()
 export class CommonFrontendContribution implements FrontendApplicationContribution, MenuContribution, CommandContribution, KeybindingContribution, ColorContribution {
@@ -448,6 +456,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
         this.initResourceContextKeys();
         this.registerCtrlWHandling();
 
+        this.setOsClass();
         this.updateStyles();
         this.preferences.ready.then(() => this.setSashProperties());
         this.preferences.onPreferenceChanged(e => this.handlePreferenceChange(e, app));
@@ -455,16 +464,16 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
         app.shell.leftPanelHandler.addBottomMenu({
             id: 'settings-menu',
             iconClass: 'codicon codicon-settings-gear',
-            title: nls.localizeByDefault(CommonCommands.PREFERENCES_CATEGORY),
-            menuPath: SETTINGS_MENU,
-            order: 0,
+            title: nls.localizeByDefault(CommonCommands.MANAGE_CATEGORY),
+            menuPath: MANAGE_MENU,
+            order: 1,
         });
         const accountsMenu = {
             id: 'accounts-menu',
             iconClass: 'codicon codicon-person',
             title: nls.localizeByDefault('Accounts'),
             menuPath: ACCOUNTS_MENU,
-            order: 1,
+            order: 0,
         };
         this.authenticationService.onDidRegisterAuthenticationProvider(() => {
             app.shell.leftPanelHandler.addBottomMenu(accountsMenu);
@@ -474,6 +483,16 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 app.shell.leftPanelHandler.removeBottomMenu(accountsMenu.id);
             }
         });
+    }
+
+    protected setOsClass(): void {
+        if (isOSX) {
+            document.body.classList.add(CLASSNAME_OS_MAC);
+        } else if (isWindows) {
+            document.body.classList.add(CLASSNAME_OS_WINDOWS);
+        } else {
+            document.body.classList.add(CLASSNAME_OS_LINUX);
+        }
     }
 
     protected updateStyles(): void {
@@ -700,11 +719,14 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             commandId: CommonCommands.SELECT_ICON_THEME.id
         });
 
-        registry.registerMenuAction(CommonMenus.SETTINGS__THEME, {
-            commandId: CommonCommands.SELECT_COLOR_THEME.id
+        registry.registerSubmenu(CommonMenus.MANAGE_SETTINGS_THEMES, nls.localizeByDefault('Themes'), { order: 'a50' });
+        registry.registerMenuAction(CommonMenus.MANAGE_SETTINGS_THEMES, {
+            commandId: CommonCommands.SELECT_COLOR_THEME.id,
+            order: '0'
         });
-        registry.registerMenuAction(CommonMenus.SETTINGS__THEME, {
-            commandId: CommonCommands.SELECT_ICON_THEME.id
+        registry.registerMenuAction(CommonMenus.MANAGE_SETTINGS_THEMES, {
+            commandId: CommonCommands.SELECT_ICON_THEME.id,
+            order: '1'
         });
 
         registry.registerSubmenu(CommonMenus.VIEW_APPEARANCE_SUBMENU, nls.localizeByDefault('Appearance'));
@@ -731,7 +753,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportCut) {
                     document.execCommand('cut');
                 } else {
-                    this.messageService.warn("Please use the browser's cut command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/cutWarn', "Please use the browser's cut command or shortcut."));
                 }
             }
         });
@@ -740,7 +762,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportCopy) {
                     document.execCommand('copy');
                 } else {
-                    this.messageService.warn("Please use the browser's copy command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/copyWarn', "Please use the browser's copy command or shortcut."));
                 }
             }
         });
@@ -749,7 +771,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportPaste) {
                     document.execCommand('paste');
                 } else {
-                    this.messageService.warn("Please use the browser's paste command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/pasteWarn', "Please use the browser's paste command or shortcut."));
                 }
             }
         });
@@ -762,7 +784,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                     const text = uris.map(resource => resource.path.fsPath()).join(lineDelimiter);
                     await this.clipboardService.writeText(text);
                 } else {
-                    await this.messageService.info('Open a file first to copy its path');
+                    await this.messageService.info(nls.localize('theia/core/copyInfo', 'Open a file first to copy its path'));
                 }
             }
         }));
@@ -1178,21 +1200,59 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 action: async () => {
                     const captionsToSave = this.unsavedTabsCaptions();
                     const untitledCaptionsToSave = this.unsavedUntitledTabsCaptions();
-                    const result = await confirmExitWithOrWithoutSaving(captionsToSave, async () => {
+                    const shouldExit = await this.confirmExitWithOrWithoutSaving(captionsToSave, async () => {
                         await this.saveDirty(untitledCaptionsToSave);
                         await this.shell.saveAll();
                     });
-                    if (this.shell.canSaveAll()) {
-                        this.shouldPreventClose = true;
-                        return false;
-                    } else {
-                        this.shouldPreventClose = false;
-                        return result;
-                    }
+                    const allSavedOrDoNotSave = (
+                        shouldExit === true && untitledCaptionsToSave.length === 0 // Should save and cancel if any captions failed to save
+                    ) || shouldExit === false; // Do not save
+
+                    this.shouldPreventClose = !allSavedOrDoNotSave;
+                    return allSavedOrDoNotSave;
 
                 }
             };
         }
+    }
+    // Asks the user to confirm whether they want to exit with or without saving the changes
+    private async confirmExitWithOrWithoutSaving(captionsToSave: string[], performSave: () => Promise<void>): Promise<boolean | undefined> {
+        const div: HTMLElement = document.createElement('div');
+        div.innerText = nls.localizeByDefault("Your changes will be lost if you don't save them.");
+
+        let result;
+        if (captionsToSave.length > 0) {
+            const span = document.createElement('span');
+            span.appendChild(document.createElement('br'));
+            captionsToSave.forEach(cap => {
+                const b = document.createElement('b');
+                b.innerText = cap;
+                span.appendChild(b);
+                span.appendChild(document.createElement('br'));
+            });
+            span.appendChild(document.createElement('br'));
+            div.appendChild(span);
+            result = await new ConfirmSaveDialog({
+                title: nls.localizeByDefault('Do you want to save the changes to the following {0} files?', captionsToSave.length),
+                msg: div,
+                dontSave: nls.localizeByDefault("Don't Save"),
+                save: nls.localizeByDefault('Save All'),
+                cancel: Dialog.CANCEL
+            }).open();
+
+            if (result) {
+                await performSave();
+            }
+        } else {
+            // fallback if not passed with an empty caption-list.
+            result = confirmExit();
+        }
+        if (result !== undefined) {
+            return result === true;
+        } else {
+            return undefined;
+        };
+
     }
     protected unsavedTabsCaptions(): string[] {
         return this.shell.widgets
@@ -1214,11 +1274,19 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             this.windowService.reload();
         }
     }
+    /**
+     * saves any dirty widget in toSave
+     * side effect - will pop all widgets from toSave that was saved
+     * @param toSave
+     */
     protected async saveDirty(toSave: Widget[]): Promise<void> {
         for (const widget of toSave) {
             const saveable = Saveable.get(widget);
             if (saveable?.dirty) {
                 await this.saveResourceService.save(widget);
+                if (!this.saveResourceService.canSave(widget)) {
+                    toSave.pop();
+                }
             }
         }
     }
@@ -2292,6 +2360,24 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                     hcDark: Color.lighten('statusBar.offlineBackground', 0.6),
                     hcLight: Color.lighten('statusBar.offlineBackground', 0.6)
                 }, description: 'Background of active statusbar item in case the theia server is offline.'
+            },
+            {
+                id: 'statusBarItem.remoteBackground',
+                defaults: {
+                    dark: 'activityBarBadge.background',
+                    light: 'activityBarBadge.background',
+                    hcDark: 'activityBarBadge.background',
+                    hcLight: 'activityBarBadge.background'
+                }, description: 'Background color for the remote indicator on the status bar.'
+            },
+            {
+                id: 'statusBarItem.remoteForeground',
+                defaults: {
+                    dark: 'activityBarBadge.foreground',
+                    light: 'activityBarBadge.foreground',
+                    hcDark: 'activityBarBadge.foreground',
+                    hcLight: 'activityBarBadge.foreground'
+                }, description: 'Foreground color for the remote indicator on the status bar.'
             },
             // Buttons
             {
