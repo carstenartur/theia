@@ -22,7 +22,9 @@ export class WebpackGenerator extends AbstractGenerator {
 
     async generate(): Promise<void> {
         await this.write(this.genConfigPath, this.compileWebpackConfig());
-        await this.write(this.genNodeConfigPath, this.compileNodeWebpackConfig());
+        if (!this.pck.isBrowserOnly()) {
+            await this.write(this.genNodeConfigPath, this.compileNodeWebpackConfig());
+        }
         if (await this.shouldGenerateUserWebpackConfig()) {
             await this.write(this.configPath, this.compileUserWebpackConfig());
         }
@@ -332,7 +334,7 @@ module.exports = [{
  */
 // @ts-check
 const configs = require('./${paths.basename(this.genConfigPath)}');
-const nodeConfig = require('./${paths.basename(this.genNodeConfigPath)}');
+${this.ifBrowserOnly('', `const nodeConfig = require('./${paths.basename(this.genNodeConfigPath)}');`)}
 
 /**
  * Expose bundled modules on window.theia.moduleName namespace, e.g.
@@ -343,10 +345,11 @@ configs[0].module.rules.push({
     loader: require.resolve('@theia/application-manager/lib/expose-loader')
 }); */
 
-module.exports = [
+${this.ifBrowserOnly('module.exports = configs;', `module.exports = [
     ...configs,
     nodeConfig.config
-];`;
+];`)}
+`;
     }
 
     protected compileNodeWebpackConfig(): string {
@@ -375,6 +378,7 @@ for (const [entryPointName, entryPointPath] of Object.entries({
     ${this.ifPackage('@theia/plugin-ext', "'backend-init-theia': '@theia/plugin-ext/lib/hosted/node/scanners/backend-init-theia',")}
     ${this.ifPackage('@theia/filesystem', "'nsfw-watcher': '@theia/filesystem/lib/node/nsfw-watcher',")}
     ${this.ifPackage('@theia/plugin-ext-vscode', "'plugin-vscode-init': '@theia/plugin-ext-vscode/lib/node/plugin-vscode-init',")}
+    ${this.ifPackage('@theia/api-provider-sample', "'gotd-api-init': '@theia/api-provider-sample/lib/plugin/gotd-api-init',")}
 })) {
     commonJsLibraries[entryPointName] = {
         import: require.resolve(entryPointPath),
@@ -426,6 +430,8 @@ const config = {
         'ipc-bootstrap': require.resolve('@theia/core/lib/node/messaging/ipc-bootstrap'),
         ${this.ifPackage('@theia/plugin-ext', () => `// VS Code extension support:
         'plugin-host': require.resolve('@theia/plugin-ext/lib/hosted/node/plugin-host'),`)}
+        ${this.ifPackage('@theia/plugin-ext-headless', () => `// Theia Headless Plugin support:
+        'plugin-host-headless': require.resolve('@theia/plugin-ext-headless/lib/hosted/node/plugin-host-headless'),`)}
         ${this.ifPackage('@theia/process', () => `// Make sure the node-pty thread worker can be executed:
         'worker/conoutSocketWorker': require.resolve('node-pty/lib/worker/conoutSocketWorker'),`)}
         ${this.ifPackage('@theia/git', () => `// Ensure the git locator process can the started

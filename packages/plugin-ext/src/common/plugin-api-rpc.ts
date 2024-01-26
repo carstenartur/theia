@@ -163,15 +163,17 @@ export interface EnvInit {
     queryParams: QueryParameters;
     language: string;
     shell: string;
-    uiKind: UIKind,
+    uiKind: UIKind;
     appName: string;
     appHost: string;
+    appRoot: string;
 }
 
 export interface PluginAPI {
 
 }
 
+export const PluginManager = Symbol.for('PluginManager');
 export interface PluginManager {
     getAllPlugins(): Plugin[];
     getPluginById(pluginId: string): Plugin | undefined;
@@ -243,10 +245,9 @@ export interface PluginManagerStartParams {
     activationEvents: string[]
 }
 
-export interface PluginManagerExt {
-
+export interface AbstractPluginManagerExt<P extends Record<string, any>> {
     /** initialize the manager, should be called only once */
-    $init(params: PluginManagerInitializeParams): Promise<void>;
+    $init(params: P): Promise<void>;
 
     /** load and activate plugins */
     $start(params: PluginManagerStartParams): Promise<void>;
@@ -263,6 +264,8 @@ export interface PluginManagerExt {
 
     $activatePlugin(id: string): Promise<void>;
 }
+
+export interface PluginManagerExt extends AbstractPluginManagerExt<PluginManagerInitializeParams> { }
 
 export interface CommandRegistryMain {
     $registerCommand(command: theia.CommandDescription): void;
@@ -327,9 +330,9 @@ export interface TerminalServiceMain {
      * Send text to the terminal by id.
      * @param id - terminal widget id.
      * @param text - text content.
-     * @param addNewLine - in case true - add new line after the text, otherwise - don't apply new line.
+     * @param shouldExecute - in case true - Indicates that the text being sent should be executed rather than just inserted in the terminal.
      */
-    $sendText(id: string, text: string, addNewLine?: boolean): void;
+    $sendText(id: string, text: string, shouldExecute?: boolean): void;
 
     /**
      * Write data to the terminal by id.
@@ -2651,6 +2654,7 @@ export interface IdentifiableInlineCompletion extends InlineCompletion {
     idx: number;
 }
 
+export const LocalizationExt = Symbol('LocalizationExt');
 export interface LocalizationExt {
     translateMessage(pluginId: string, details: StringDetails): string;
     getBundle(pluginId: string): Record<string, string> | undefined;

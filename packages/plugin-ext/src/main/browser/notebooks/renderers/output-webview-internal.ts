@@ -114,7 +114,7 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
             this.element.style.paddingRight = '10px';
             this.element.id = output.id;
             document.body.appendChild(this.element);
-
+            this.outputId = output.id;
             this.allItems = items;
         }
 
@@ -134,7 +134,7 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
         }
     }
 
-    const outputs = new Map</* outputId */string, Output>();
+    const outputs: Output[] = [];
 
     class Renderer {
 
@@ -314,10 +314,17 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
             // we need to check for all images are loaded. Otherwise we can't determine the correct height of the output
             const images = Array.from(document.images);
             if (images.length > 0) {
-                Promise.all(images.filter(img => !img.complete).map(img => new Promise(resolve => { img.onload = img.onerror = resolve; }))).then(() =>
-                    theia.postMessage(<webviewCommunication.OnDidRenderOutput>{ type: 'didRenderOutput', contentHeight: document.body.clientHeight }));
+                Promise.all(images.filter(img => !img.complete).map(img => new Promise(resolve => { img.onload = img.onerror = resolve; }))).then(() => {
+                    theia.postMessage(<webviewCommunication.OnDidRenderOutput>{ type: 'didRenderOutput', contentHeight: document.body.clientHeight });
+                    new ResizeObserver(() =>
+                        theia.postMessage(<webviewCommunication.OnDidRenderOutput>{ type: 'didRenderOutput', contentHeight: document.body.clientHeight }))
+                        .observe(document.body);
+                });
             } else {
                 theia.postMessage(<webviewCommunication.OnDidRenderOutput>{ type: 'didRenderOutput', contentHeight: document.body.clientHeight });
+                new ResizeObserver(() =>
+                    theia.postMessage(<webviewCommunication.OnDidRenderOutput>{ type: 'didRenderOutput', contentHeight: document.body.clientHeight }))
+                    .observe(document.body);
             }
 
         }
@@ -378,15 +385,14 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
         }
     }();
 
-    function clearOutput(outputId: string): void {
-        outputs.get(outputId)?.clear();
-        outputs.delete(outputId);
-        document.getElementById(outputId)?.remove();
+    function clearOutput(output: Output): void {
+        output.clear();
+        output.element.remove();
     }
 
     function outputsChanged(changedEvent: webviewCommunication.OutputChangedMessage): void {
-        for (const outputId of changedEvent.deletedOutputIds ?? []) {
-            clearOutput(outputId);
+        for (const output of outputs.splice(changedEvent.deleteStart ?? 0, changedEvent.deleteCount ?? 0)) {
+            clearOutput(output);
         }
 
         for (const outputData of changedEvent.newOutputs ?? []) {
@@ -410,7 +416,7 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
             }));
 
             const output = new Output(outputData, apiItems);
-            outputs.set(outputData.id, output);
+            outputs.push(output);
 
             renderers.render(output, undefined, undefined, new AbortController().signal);
         }
@@ -466,8 +472,11 @@ export async function outputWebviewPreload(ctx: PreloadContext): Promise<void> {
                 renderers.getRenderer(event.data.rendererId)?.receiveMessage(event.data.message);
                 break;
             case 'changePreferredMimetype':
-                clearOutput(event.data.outputId);
-                renderers.render(outputs.get(event.data.outputId)!, event.data.mimeType, undefined, new AbortController().signal);
+                const outputId = event.data.outputId;
+                const index = outputs.findIndex(output => output.outputId === outputId);
+                outputs.splice(index, 1);
+                clearOutput(outputs.splice(index, 1)[0]);
+                renderers.render(outputs[index], event.data.mimeType, undefined, new AbortController().signal);
                 break;
         }
     });
