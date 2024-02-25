@@ -709,7 +709,8 @@ export function createAPIFactory(
                 } else {
                     throw new Error('Invalid arguments');
                 }
-                return notebooksExt.getNotebookDocument(uri).apiNotebook;
+                const result = await notebooksExt.waitForNotebookDocument(uri);
+                return result.apiNotebook;
 
             },
             createFileSystemWatcher: (pattern, ignoreCreate, ignoreChange, ignoreDelete): theia.FileSystemWatcher =>
@@ -720,6 +721,13 @@ export function createAPIFactory(
             findTextInFiles(query: theia.TextSearchQuery, optionsOrCallback: theia.FindTextInFilesOptions | ((result: theia.TextSearchResult) => void),
                 callbackOrToken?: CancellationToken | ((result: theia.TextSearchResult) => void), token?: CancellationToken): Promise<theia.TextSearchComplete> {
                 return workspaceExt.findTextInFiles(query, optionsOrCallback, callbackOrToken, token);
+            },
+            save(uri: theia.Uri): PromiseLike<theia.Uri | undefined> {
+                return editors.save(uri);
+            },
+
+            saveAs(uri: theia.Uri): PromiseLike<theia.Uri | undefined> {
+                return editors.saveAs(uri);
             },
             saveAll(includeUntitled?: boolean): PromiseLike<boolean> {
                 return editors.saveAll(includeUntitled);
@@ -1175,7 +1183,7 @@ export function createAPIFactory(
                     controller: theia.NotebookController) => void | Thenable<void>,
                 rendererScripts?: NotebookRendererScript[]
             ) {
-                return notebookKernels.createNotebookController(plugin.model.id, id, notebookType, label, handler, rendererScripts);
+                return notebookKernels.createNotebookController(plugin.model, id, notebookType, label, handler, rendererScripts);
             },
             createRendererMessaging(rendererId) {
                 return notebookRenderers.createRendererMessaging(rendererId);

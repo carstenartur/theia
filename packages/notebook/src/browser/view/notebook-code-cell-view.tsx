@@ -61,7 +61,7 @@ export class NotebookCodeCellRenderer implements CellRenderer {
                 </div>
             </div>
             <div className='theia-notebook-cell-with-sidebar'>
-                <NotebookCodeCellOutputs cell={cell} outputWebviewFactory={this.cellOutputWebviewFactory}
+                <NotebookCodeCellOutputs cell={cell} notebook={notebookModel} outputWebviewFactory={this.cellOutputWebviewFactory}
                     renderSidebar={() =>
                         this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.OUTPUT_SIDEBAR_MENU, notebookModel, cell, cell.outputs[0])} />
             </div>
@@ -71,21 +71,40 @@ export class NotebookCodeCellRenderer implements CellRenderer {
 
 export interface NotebookCodeCellStatusProps {
     cell: NotebookCellModel;
-    executionStateService: NotebookExecutionStateService
+    executionStateService: NotebookExecutionStateService;
 }
 
-export class NotebookCodeCellStatus extends React.Component<NotebookCodeCellStatusProps, { currentExecution?: CellExecution }> {
+export interface NotebookCodeCellStatusState {
+    currentExecution?: CellExecution;
+    executionTime: number;
+}
+
+export class NotebookCodeCellStatus extends React.Component<NotebookCodeCellStatusProps, NotebookCodeCellStatusState> {
 
     protected toDispose = new DisposableCollection();
 
     constructor(props: NotebookCodeCellStatusProps) {
         super(props);
 
-        this.state = {};
+        this.state = {
+            executionTime: 0
+        };
 
+        let currentInterval: NodeJS.Timeout | undefined;
         this.toDispose.push(props.executionStateService.onDidChangeExecution(event => {
             if (event.affectsCell(this.props.cell.uri)) {
-                this.setState({ currentExecution: event.changed });
+                this.setState({ currentExecution: event.changed, executionTime: 0 });
+                clearInterval(currentInterval);
+                if (event.changed?.state === NotebookCellExecutionState.Executing) {
+                    const startTime = Date.now();
+                    // The resolution of the time display is only a single digit after the decimal point.
+                    // Therefore, we only need to update the display every 100ms.
+                    currentInterval = setInterval(() => {
+                        this.setState({
+                            executionTime: Date.now() - startTime
+                        });
+                    }, 100);
+                }
             }
         }));
     }
@@ -126,22 +145,28 @@ export class NotebookCodeCellStatus extends React.Component<NotebookCodeCellStat
             {iconClasses &&
                 <>
                     <span className={`${iconClasses} notebook-cell-status-item`} style={{ color }}></span>
-                    <div className='notebook-cell-status-item'>{this.getExecutionTime()}</div>
+                    <div className='notebook-cell-status-item'>{this.renderTime(this.getExecutionTime())}</div>
                 </>}
         </>;
     }
 
-    private getExecutionTime(): string {
+    private getExecutionTime(): number {
         const { runStartTime, runEndTime } = this.props.cell.internalMetadata;
-        if (runStartTime && runEndTime) {
-            return `${((runEndTime - runStartTime) / 1000).toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}s`;
+        const { executionTime } = this.state;
+        if (runStartTime !== undefined && runEndTime !== undefined) {
+            return runEndTime - runStartTime;
         }
-        return '0.0s';
+        return executionTime;
+    }
+
+    private renderTime(ms: number): string {
+        return `${(ms / 1000).toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}s`;
     }
 }
 
 interface NotebookCellOutputProps {
     cell: NotebookCellModel;
+    notebook: NotebookModel;
     outputWebviewFactory: CellOutputWebviewFactory;
     renderSidebar: () => React.ReactNode;
 }
@@ -158,14 +183,14 @@ export class NotebookCodeCellOutputs extends React.Component<NotebookCellOutputP
     }
 
     override async componentDidMount(): Promise<void> {
-        const { cell, outputWebviewFactory } = this.props;
+        const { cell, notebook, outputWebviewFactory } = this.props;
         this.toDispose.push(cell.onDidChangeOutputs(async () => {
             if (!this.outputsWebviewPromise && cell.outputs.length > 0) {
-                this.outputsWebviewPromise = outputWebviewFactory(cell).then(webview => {
+                this.outputsWebviewPromise = outputWebviewFactory(cell, notebook).then(webview => {
                     this.outputsWebview = webview;
                     this.forceUpdate();
                     return webview;
-                    });
+                });
                 this.forceUpdate();
             } else if (this.outputsWebviewPromise && cell.outputs.length === 0 && cell.internalMetadata.runEndTime) {
                 (await this.outputsWebviewPromise).dispose();
@@ -175,7 +200,7 @@ export class NotebookCodeCellOutputs extends React.Component<NotebookCellOutputP
             }
         }));
         if (cell.outputs.length > 0) {
-            this.outputsWebviewPromise = outputWebviewFactory(cell).then(webview => {
+            this.outputsWebviewPromise = outputWebviewFactory(cell, notebook).then(webview => {
                 this.outputsWebview = webview;
                 this.forceUpdate();
                 return webview;
