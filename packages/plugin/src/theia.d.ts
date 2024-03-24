@@ -1897,7 +1897,11 @@ export module '@theia/plugin' {
         /**
          * Render the line numbers with values relative to the primary cursor location.
          */
-        Relative = 2
+        Relative = 2,
+        /**
+         * Render the line numbers on every 10th line number.
+         */
+        Interval = 3
     }
 
     /**
@@ -7593,7 +7597,7 @@ export module '@theia/plugin' {
          * @param options Immutable metadata about the provider.
          * @return A {@link Disposable disposable} that unregisters this provider when being disposed.
          */
-        export function registerFileSystemProvider(scheme: string, provider: FileSystemProvider, options?: { readonly isCaseSensitive?: boolean, readonly isReadonly?: boolean }): Disposable;
+        export function registerFileSystemProvider(scheme: string, provider: FileSystemProvider, options?: { readonly isCaseSensitive?: boolean, readonly isReadonly?: boolean | MarkdownString }): Disposable;
 
         /**
          * Returns the {@link WorkspaceFolder workspace folder} that contains a given uri.
@@ -15979,8 +15983,17 @@ export module '@theia/plugin' {
          * the generic "run all" button, then the default profile for
          * {@link TestRunProfileKind.Run} will be executed, although the
          * user can configure this.
+         *
+         * Changes the user makes in their default profiles will be reflected
+         * in this property after a {@link onDidChangeDefault} event.
          */
         isDefault: boolean;
+
+        /**
+         * Fired when a user has changed whether this is a default profile. The
+         * event contains the new value of {@link isDefault}
+         */
+        onDidChangeDefault: Event<boolean>;
 
         /**
          * Whether this profile supports continuous running of requests. If so,

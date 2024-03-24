@@ -603,6 +603,12 @@ export function createAPIFactory(
             registerTerminalQuickFixProvider(id: string, provider: theia.TerminalQuickFixProvider): theia.Disposable {
                 return terminalExt.registerTerminalQuickFixProvider(id, provider);
             },
+
+            /** Theia-specific TerminalObserver */
+            registerTerminalObserver(observer: theia.TerminalObserver): theia.Disposable {
+                return terminalExt.registerTerminalObserver(observer);
+            },
+
             /** @stubbed ShareProvider */
             registerShareProvider: () => Disposable.NULL,
         };
@@ -738,7 +744,8 @@ export function createAPIFactory(
             registerTextDocumentContentProvider(scheme: string, provider: theia.TextDocumentContentProvider): theia.Disposable {
                 return workspaceExt.registerTextDocumentContentProvider(scheme, provider);
             },
-            registerFileSystemProvider(scheme: string, provider: theia.FileSystemProvider, options?: { isCaseSensitive?: boolean, isReadonly?: boolean }): theia.Disposable {
+            registerFileSystemProvider(scheme: string, provider: theia.FileSystemProvider, options?: { isCaseSensitive?: boolean, isReadonly?: boolean | MarkdownString}):
+                theia.Disposable {
                 return fileSystemExt.registerFileSystemProvider(scheme, provider, options);
             },
             getWorkspaceFolder(uri: theia.Uri): theia.WorkspaceFolder | undefined {

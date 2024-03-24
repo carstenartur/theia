@@ -29,6 +29,11 @@ import { CellExecution, NotebookExecutionStateService } from '../service/noteboo
 import { codicon } from '@theia/core/lib/browser';
 import { NotebookCellExecutionState } from '../../common';
 import { DisposableCollection } from '@theia/core';
+import { NotebookContextManager } from '../service/notebook-context-manager';
+import { NotebookViewportService } from './notebook-viewport-service';
+import { EditorPreferences } from '@theia/editor/lib/browser';
+import { BareFontInfo } from '@theia/monaco-editor-core/esm/vs/editor/common/config/fontInfo';
+import { PixelRatio } from '@theia/monaco-editor-core/esm/vs/base/browser/browser';
 
 @injectable()
 export class NotebookCodeCellRenderer implements CellRenderer {
@@ -47,25 +52,58 @@ export class NotebookCodeCellRenderer implements CellRenderer {
     @inject(NotebookExecutionStateService)
     protected readonly executionStateService: NotebookExecutionStateService;
 
+    @inject(NotebookContextManager)
+    protected readonly notebookContextManager: NotebookContextManager;
+
+    @inject(NotebookViewportService)
+    protected readonly notebookViewportService: NotebookViewportService;
+
+    @inject(EditorPreferences)
+    protected readonly editorPreferences: EditorPreferences;
+
+    protected fontInfo: BareFontInfo | undefined;
+
     render(notebookModel: NotebookModel, cell: NotebookCellModel, handle: number): React.ReactNode {
         return <div>
             <div className='theia-notebook-cell-with-sidebar'>
-                <div>
+                <div className='theia-notebook-cell-sidebar'>
                     {this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.CODE_CELL_SIDEBAR_MENU, notebookModel, cell)}
-                    {/* cell-execution-order needs an own component. Could be a little more complicated
-                    <p className='theia-notebook-code-cell-execution-order'>{`[${cell.exec ?? ' '}]`}</p> */}
+                    <CodeCellExecutionOrder cell={cell} />
                 </div>
                 <div className='theia-notebook-cell-editor-container'>
-                    <CellEditor notebookModel={notebookModel} cell={cell} monacoServices={this.monacoServices} />
+                    <CellEditor notebookModel={notebookModel} cell={cell}
+                        monacoServices={this.monacoServices}
+                        notebookContextManager={this.notebookContextManager}
+                        notebookViewportService={this.notebookViewportService}
+                        fontInfo={this.getOrCreateMonacoFontInfo()} />
                     <NotebookCodeCellStatus cell={cell} executionStateService={this.executionStateService}></NotebookCodeCellStatus>
-                </div>
-            </div>
+                </div >
+            </div >
             <div className='theia-notebook-cell-with-sidebar'>
                 <NotebookCodeCellOutputs cell={cell} notebook={notebookModel} outputWebviewFactory={this.cellOutputWebviewFactory}
                     renderSidebar={() =>
                         this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.OUTPUT_SIDEBAR_MENU, notebookModel, cell, cell.outputs[0])} />
             </div>
         </div >;
+    }
+
+    protected getOrCreateMonacoFontInfo(): BareFontInfo {
+        if (!this.fontInfo) {
+            this.fontInfo = this.createFontInfo();
+            this.editorPreferences.onPreferenceChanged(e => this.fontInfo = this.createFontInfo());
+        }
+        return this.fontInfo;
+    }
+
+    protected createFontInfo(): BareFontInfo {
+        return BareFontInfo.createFromRawSettings({
+            fontFamily: this.editorPreferences['editor.fontFamily'],
+            fontWeight: String(this.editorPreferences['editor.fontWeight']),
+            fontSize: this.editorPreferences['editor.fontSize'],
+            fontLigatures: this.editorPreferences['editor.fontLigatures'],
+            lineHeight: this.editorPreferences['editor.lineHeight'],
+            letterSpacing: this.editorPreferences['editor.letterSpacing'],
+        }, PixelRatio.value);
     }
 }
 
@@ -229,4 +267,21 @@ export class NotebookCodeCellOutputs extends React.Component<NotebookCellOutputP
 
     }
 
+}
+
+interface NotebookCellExecutionOrderProps {
+    cell: NotebookCellModel;
+}
+
+function CodeCellExecutionOrder({ cell }: NotebookCellExecutionOrderProps): React.JSX.Element {
+    const [executionOrder, setExecutionOrder] = React.useState(cell.internalMetadata.executionOrder ?? ' ');
+
+    React.useEffect(() => {
+        const listener = cell.onDidChangeInternalMetadata(e => {
+            setExecutionOrder(cell.internalMetadata.executionOrder ?? ' ');
+        });
+        return () => listener.dispose();
+    }, []);
+
+    return <span className='theia-notebook-code-cell-execution-order'>{`[${executionOrder}]`}</span>;
 }

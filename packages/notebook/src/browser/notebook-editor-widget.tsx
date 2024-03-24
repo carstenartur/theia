@@ -30,7 +30,8 @@ import { NotebookEditorWidgetService } from './service/notebook-editor-widget-se
 import { NotebookMainToolbarRenderer } from './view/notebook-main-toolbar';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import { MarkdownString } from '@theia/core/lib/common/markdown-rendering';
-
+import { NotebookContextManager } from './service/notebook-context-manager';
+import { NotebookViewportService } from './view/notebook-viewport-service';
 const PerfectScrollbar = require('react-perfect-scrollbar');
 
 export const NotebookEditorWidgetContainerFactory = Symbol('NotebookEditorWidgetContainerFactory');
@@ -39,12 +40,19 @@ export function createNotebookEditorWidgetContainer(parent: interfaces.Container
     const child = parent.createChild();
 
     child.bind(NotebookEditorProps).toConstantValue(props);
+
+    child.bind(NotebookContextManager).toSelf().inSingletonScope();
+    child.bind(NotebookMainToolbarRenderer).toSelf().inSingletonScope();
+    child.bind(NotebookCodeCellRenderer).toSelf().inSingletonScope();
+    child.bind(NotebookMarkdownCellRenderer).toSelf().inSingletonScope();
+    child.bind(NotebookViewportService).toSelf().inSingletonScope();
+
     child.bind(NotebookEditorWidget).toSelf();
 
     return child;
 }
 
-const NotebookEditorProps = Symbol('NotebookEditorProps');
+export const NotebookEditorProps = Symbol('NotebookEditorProps');
 
 interface RenderMessage {
     rendererId: string;
@@ -79,12 +87,18 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
     @inject(NotebookMainToolbarRenderer)
     protected notebookMainToolbarRenderer: NotebookMainToolbarRenderer;
 
+    @inject(NotebookContextManager)
+    protected notebookContextManager: NotebookContextManager;
+
     @inject(NotebookCodeCellRenderer)
     protected codeCellRenderer: NotebookCodeCellRenderer;
     @inject(NotebookMarkdownCellRenderer)
     protected markdownCellRenderer: NotebookMarkdownCellRenderer;
     @inject(NotebookEditorProps)
     protected readonly props: NotebookEditorProps;
+
+    @inject(NotebookViewportService)
+    protected readonly viewportService: NotebookViewportService;
 
     protected readonly onDidChangeModelEmitter = new Emitter<void>();
     readonly onDidChangeModel = this.onDidChangeModelEmitter.event;
@@ -159,6 +173,7 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
         // Ensure that the model is loaded before adding the editor
         this.notebookEditorService.addNotebookEditor(this);
         this.update();
+        this.notebookContextManager.init(this);
         return this._model;
     }
 
@@ -172,7 +187,7 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
     }
 
     createMoveToUri(resourceUri: URI): URI | undefined {
-        return this.props.uri;
+        return this.model?.uri.withPath(resourceUri.path);
     }
 
     undo(): void {
@@ -186,25 +201,24 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
     protected render(): ReactNode {
         if (this._model) {
             return <div className='theia-notebook-main-container'>
-                {this.notebookMainToolbarRenderer.render(this._model)}
-                <PerfectScrollbar className='theia-notebook-scroll-container'>
-                    <NotebookCellListView renderers={this.renderers}
-                        notebookModel={this._model}
-                        toolbarRenderer={this.cellToolbarFactory}
-                        commandRegistry={this.commandRegistry} />
-                </PerfectScrollbar>
-            </div>;
+                {this.notebookMainToolbarRenderer.render(this._model, this.node)}
+                <div className='theia-notebook-viewport' ref={(ref: HTMLDivElement) => this.viewportService.viewportElement = ref}>
+                    <PerfectScrollbar className='theia-notebook-scroll-container'
+                        onScrollY={(e: HTMLDivElement) => this.viewportService.onScroll(e)}>
+                        <NotebookCellListView renderers={this.renderers}
+                            notebookModel={this._model}
+                            toolbarRenderer={this.cellToolbarFactory}
+                            commandRegistry={this.commandRegistry} />
+                    </PerfectScrollbar>
+                </div>
+            </div >;
         } else {
             return <div></div>;
         }
     }
 
-    protected override onAfterAttach(msg: Message): void {
-        super.onAfterAttach(msg);
-    }
-
-    protected override onAfterDetach(msg: Message): void {
-        super.onAfterDetach(msg);
+    protected override onCloseRequest(msg: Message): void {
+        super.onCloseRequest(msg);
         this.notebookEditorService.removeNotebookEditor(this);
     }
 
@@ -221,10 +235,12 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
     }
 
     override dispose(): void {
+        this.notebookContextManager.dispose();
         this.onDidChangeModelEmitter.dispose();
         this.onDidPostKernelMessageEmitter.dispose();
         this.onDidReceiveKernelMessageEmitter.dispose();
         this.onPostRendererMessageEmitter.dispose();
+        this.viewportService.dispose();
         super.dispose();
     }
 }

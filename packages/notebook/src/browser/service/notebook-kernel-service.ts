@@ -239,12 +239,16 @@ export class NotebookKernelService {
         const all = kernels.map(obj => obj.kernel);
 
         // bound kernel
-        const selectedId = this.notebookBindings[`${notebook.viewType}/${notebook.uri}`];
-        const selected = selectedId ? this.kernels.get(selectedId)?.kernel : undefined;
+        const selected = this.getSelectedNotebookKernel(notebook);
         const suggestions = kernels.filter(item => item.instanceAffinity > 1).map(item => item.kernel); // TODO implement notebookAffinity
         const hidden = kernels.filter(item => item.instanceAffinity < 0).map(item => item.kernel);
         return { all, selected, suggestions, hidden };
 
+    }
+
+    getSelectedNotebookKernel(notebook: NotebookTextModelLike): NotebookKernel | undefined {
+        const selectedId = this.notebookBindings[`${notebook.viewType}/${notebook.uri}`];
+        return selectedId ? this.kernels.get(selectedId)?.kernel : undefined;
     }
 
     selectKernelForNotebook(kernel: NotebookKernel | undefined, notebook: NotebookTextModelLike): void {

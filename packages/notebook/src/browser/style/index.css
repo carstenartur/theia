@@ -129,11 +129,28 @@
   background-color: var(--theia-editor-background);
 }
 
-.theia-notebook-cell-sidebar {
+.theia-notebook-cell-sidebar-toolbar {
   display: flex;
   flex-direction: column;
   padding: 2px;
   background-color: var(--theia-editor-background);
+  flex-grow: 1;
+}
+
+.theia-notebook-cell-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.theia-notebook-code-cell-execution-order {
+  height: 35px;
+  display: block;
+  font-family: var(--monaco-monospace-font);
+  font-size: 10px;
+  opacity: 0.7;
+  text-align: center;
+  white-space: pre;
+  padding: 5px 0;
 }
 
 .theia-notebook-cell-toolbar-item {
@@ -159,11 +176,6 @@
   flex-direction: row;
 }
 
-.theia-notebook-cell-sidebar {
-  display: flex;
-  flex-direction: column;
-}
-
 .theia-notebook-main-container {
   display: flex;
   flex-direction: column;
@@ -171,10 +183,16 @@
   overflow: hidden;
 }
 
+.theia-notebook-viewport {
+  display: flex;
+  overflow: hidden;
+  height: 100%;
+}
+
 .theia-notebook-scroll-container {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
 }
 
 .theia-notebook-main-toolbar {
