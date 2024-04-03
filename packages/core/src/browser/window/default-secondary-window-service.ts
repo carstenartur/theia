@@ -19,6 +19,8 @@ import { WindowService } from './window-service';
 import { ExtractableWidget } from '../widgets';
 import { ApplicationShell } from '../shell';
 import { Saveable } from '../saveable';
+import { PreferenceService } from '../preferences';
+import { environment } from '../../common';
 
 @injectable()
 export class DefaultSecondaryWindowService implements SecondaryWindowService {
@@ -37,6 +39,9 @@ export class DefaultSecondaryWindowService implements SecondaryWindowService {
 
     @inject(WindowService)
     protected readonly windowService: WindowService;
+
+    @inject(PreferenceService)
+    protected readonly preferenceService: PreferenceService;
 
     @postConstruct()
     init(): void {
@@ -77,31 +82,14 @@ export class DefaultSecondaryWindowService implements SecondaryWindowService {
     }
 
     createSecondaryWindow(widget: ExtractableWidget, shell: ApplicationShell): Window | undefined {
-        const win = this.doCreateSecondaryWindow(widget, shell);
-        if (win) {
-            this.secondaryWindows.push(win);
-            win.addEventListener('close', () => {
-                const extIndex = this.secondaryWindows.indexOf(win);
-                if (extIndex > -1) {
-                    this.secondaryWindows.splice(extIndex, 1);
-                };
-            });
+        const [height, width, left, top] = this.findSecondaryWindowCoordinates(widget);
+        let options = `popup=1,width=${width},height=${height},left=${left},top=${top}`;
+        if (this.preferenceService.get('window.secondaryWindowAlwaysOnTop')) {
+            options += ',alwaysOnTop=true';
         }
-        return win;
-    }
-
-    protected findWindow<T>(windowName: string): Window | undefined {
-        for (const w of this.secondaryWindows) {
-            if (w.name === windowName) {
-                return w;
-            }
-        }
-        return undefined;
-    }
-
-    protected doCreateSecondaryWindow(widget: ExtractableWidget, shell: ApplicationShell): Window | undefined {
-        const newWindow = window.open(DefaultSecondaryWindowService.SECONDARY_WINDOW_URL, this.nextWindowId(), 'popup') ?? undefined;
+        const newWindow = window.open(DefaultSecondaryWindowService.SECONDARY_WINDOW_URL, this.nextWindowId(), options) ?? undefined;
         if (newWindow) {
+            this.secondaryWindows.push(newWindow);
             newWindow.addEventListener('DOMContentLoaded', () => {
                 newWindow.addEventListener('beforeunload', evt => {
                     const saveable = Saveable.get(widget);
@@ -113,15 +101,78 @@ export class DefaultSecondaryWindowService implements SecondaryWindowService {
                     }
                 }, { capture: true });
 
-                newWindow.addEventListener('close', () => {
+                newWindow.addEventListener('unload', () => {
                     const saveable = Saveable.get(widget);
                     shell.closeWidget(widget.id, {
                         save: !!saveable && saveable.dirty && saveable.autoSave !== 'off'
                     });
+
+                    const extIndex = this.secondaryWindows.indexOf(newWindow);
+                    if (extIndex > -1) {
+                        this.secondaryWindows.splice(extIndex, 1);
+                    };
                 });
+                this.windowCreated(newWindow, widget, shell);
             });
         }
         return newWindow;
+    }
+
+    protected windowCreated(newWindow: Window, widget: ExtractableWidget, shell: ApplicationShell): void {
+        newWindow.addEventListener('unload', () => {
+            shell.closeWidget(widget.id);
+        });
+    }
+
+    protected findWindow<T>(windowName: string): Window | undefined {
+        for (const w of this.secondaryWindows) {
+            if (w.name === windowName) {
+                return w;
+            }
+        }
+        return undefined;
+    }
+
+    protected findSecondaryWindowCoordinates(widget: ExtractableWidget): (number | undefined)[] {
+        const clientBounds = widget.node.getBoundingClientRect();
+        const preference = this.preferenceService.get('window.secondaryWindowPlacement');
+
+        let height; let width; let left; let top;
+        const offsetY = 20; // Offset to avoid the window title bar
+
+        switch (preference) {
+            case 'originalSize': {
+                height = widget.node.clientHeight;
+                width = widget.node.clientWidth;
+                left = window.screenLeft + clientBounds.x;
+                top = window.screenTop + (window.outerHeight - window.innerHeight) + offsetY;
+                if (environment.electron.is()) {
+                    top = window.screenTop + clientBounds.y;
+                }
+                break;
+            }
+            case 'halfWidth': {
+                height = window.innerHeight - (window.outerHeight - window.innerHeight);
+                width = window.innerWidth / 2;
+                left = window.screenLeft;
+                top = window.screenTop;
+                if (!environment.electron.is()) {
+                    height = window.innerHeight + clientBounds.y - offsetY;
+                }
+                break;
+            }
+            case 'fullSize': {
+                height = window.innerHeight - (window.outerHeight - window.innerHeight);
+                width = window.innerWidth;
+                left = window.screenLeft;
+                top = window.screenTop;
+                if (!environment.electron.is()) {
+                    height = window.innerHeight + clientBounds.y - offsetY;
+                }
+                break;
+            }
+        }
+        return [height, width, left, top];
     }
 
     focus(win: Window): void {

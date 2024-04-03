@@ -16,7 +16,7 @@
 
 import { injectable, inject, postConstruct } from '@theia/core/shared/inversify';
 import URI from '@theia/core/lib/common/uri';
-import { WorkspaceServer, CommonWorkspaceUtils } from '../common';
+import { WorkspaceServer, UntitledWorkspaceService, WorkspaceFileService } from '../common';
 import { WindowService } from '@theia/core/lib/browser/window/window-service';
 import { DEFAULT_WINDOW_HASH } from '@theia/core/lib/common/window';
 import {
@@ -83,8 +83,11 @@ export class WorkspaceService implements FrontendApplicationContribution {
     @inject(WorkspaceSchemaUpdater)
     protected readonly schemaUpdater: WorkspaceSchemaUpdater;
 
-    @inject(CommonWorkspaceUtils)
-    protected readonly utils: CommonWorkspaceUtils;
+    @inject(UntitledWorkspaceService)
+    protected readonly untitledWorkspaceService: UntitledWorkspaceService;
+
+    @inject(WorkspaceFileService)
+    protected readonly workspaceFileService: WorkspaceFileService;
 
     @inject(WindowTitleService)
     protected readonly windowTitleService: WindowTitleService;
@@ -401,8 +404,12 @@ export class WorkspaceService implements FrontendApplicationContribution {
     }
 
     async spliceRoots(start: number, deleteCount?: number, ...rootsToAdd: URI[]): Promise<URI[]> {
-        if (!this._workspace) {
-            throw new Error('There is no active workspace');
+        if (!this._workspace || this._workspace.isDirectory) {
+            const untitledWorkspace = await this.getUntitledWorkspace();
+            await this.save(untitledWorkspace);
+            if (!this._workspace) {
+                throw new Error('Could not create new untitled workspace');
+            }
         }
         const dedup = new Set<string>();
         const roots = this._roots.map(root => (dedup.add(root.resource.toString()), root.resource.toString()));
@@ -418,10 +425,7 @@ export class WorkspaceService implements FrontendApplicationContribution {
         if (!toRemove.length && !toAdd.length) {
             return [];
         }
-        if (this._workspace.isDirectory) {
-            const untitledWorkspace = await this.getUntitledWorkspace();
-            await this.save(untitledWorkspace);
-        }
+
         const currentData = await this.getWorkspaceDataFromFile();
         const newData = WorkspaceData.buildWorkspaceData(roots, currentData);
         await this.writeWorkspaceFile(this._workspace, newData);
@@ -431,7 +435,7 @@ export class WorkspaceService implements FrontendApplicationContribution {
 
     async getUntitledWorkspace(): Promise<URI> {
         const configDirURI = new URI(await this.envVariableServer.getConfigDirUri());
-        return this.utils.getUntitledWorkspaceUri(
+        return this.untitledWorkspaceService.getUntitledWorkspaceUri(
             configDirURI,
             uri => this.fileService.exists(uri).then(exists => !exists),
             () => this.messageService.warn(nls.localize(
@@ -677,15 +681,15 @@ export class WorkspaceService implements FrontendApplicationContribution {
      * Example: We should not try to read the contents of an .exe file.
      */
     protected isWorkspaceFile(candidate: FileStat | URI): boolean {
-        return this.utils.isWorkspaceFile(candidate);
+        return this.workspaceFileService.isWorkspaceFile(candidate);
     }
 
     isUntitledWorkspace(candidate?: URI): boolean {
-        return this.utils.isUntitledWorkspace(candidate);
+        return this.untitledWorkspaceService.isUntitledWorkspace(candidate);
     }
 
     async isSafeToReload(withURI?: URI): Promise<boolean> {
-        return !withURI || !this.utils.isUntitledWorkspace(withURI) || new URI(await this.getDefaultWorkspaceUri()).isEqual(withURI);
+        return !withURI || !this.untitledWorkspaceService.isUntitledWorkspace(withURI) || new URI(await this.getDefaultWorkspaceUri()).isEqual(withURI);
     }
 
     /**

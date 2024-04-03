@@ -121,7 +121,7 @@ export const TerminalConfigSchema: PreferenceSchema = {
             default: 1
         },
         'terminal.integrated.scrollback': {
-            description: nls.localizeByDefault('Controls the maximum number of lines the terminal keeps in its buffer.'),
+            description: nls.localizeByDefault('Controls the maximum number of lines the terminal keeps in its buffer. We pre-allocate memory based on this value in order to ensure a smooth experience. As such, as the value increases, so will the amount of memory.'),
             type: 'number',
             default: 1000
         },
@@ -134,7 +134,8 @@ export const TerminalConfigSchema: PreferenceSchema = {
             description: nls.localize('theia/terminal/rendererType', 'Controls how the terminal is rendered.'),
             type: 'string',
             enum: ['canvas', 'dom'],
-            default: 'canvas'
+            default: 'canvas',
+            deprecationMessage: nls.localize('theia/terminal/rendererTypeDeprecationMessage', 'The renderer type is no longer supported as an option.')
         },
         'terminal.integrated.copyOnSelection': {
             description: nls.localizeByDefault('Controls whether text selected in the terminal will be copied to the clipboard.'),
@@ -147,7 +148,7 @@ export const TerminalConfigSchema: PreferenceSchema = {
             default: false
         },
         'terminal.integrated.cursorStyle': {
-            description: nls.localizeByDefault('Controls the style of terminal cursor.'),
+            description: nls.localizeByDefault('Controls the style of terminal cursor when the terminal is focused.'),
             enum: ['block', 'underline', 'line'],
             default: 'block'
         },

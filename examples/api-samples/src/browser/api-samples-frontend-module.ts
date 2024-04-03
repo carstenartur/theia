@@ -28,6 +28,8 @@ import '../../src/browser/style/branding.css';
 import { bindMonacoPreferenceExtractor } from './monaco-editor-preferences/monaco-editor-preference-extractor';
 import { rebindOVSXClientFactory } from '../common/vsx/sample-ovsx-client-factory';
 import { bindSampleAppInfo } from './vsx/sample-frontend-app-info';
+import { bindTestSample } from './test/sample-test-contribution';
+import { bindSampleFileSystemCapabilitiesCommands } from './file-system/sample-file-system-capabilities';
 
 export default new ContainerModule((
     bind: interfaces.Bind,
@@ -45,5 +47,7 @@ export default new ContainerModule((
     bindSampleToolbarContribution(bind, rebind);
     bindMonacoPreferenceExtractor(bind);
     bindSampleAppInfo(bind);
+    bindTestSample(bind);
+    bindSampleFileSystemCapabilitiesCommands(bind);
     rebindOVSXClientFactory(rebind);
 });

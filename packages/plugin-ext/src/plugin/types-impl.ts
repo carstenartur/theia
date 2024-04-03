@@ -32,6 +32,7 @@ import { FileSystemProviderErrorCode, markAsFileSystemProviderError } from '@the
 import * as paths from 'path';
 import { es5ClassCompat } from '../common/types';
 import { isObject, isStringArray } from '@theia/core/lib/common';
+import { CellEditType, CellMetadataEdit, NotebookDocumentMetadataEdit } from '@theia/notebook/lib/common';
 
 /**
  * This is an implementation of #theia.Uri based on vscode-uri.
@@ -152,7 +153,8 @@ export enum StatusBarAlignment {
 export enum TextEditorLineNumbersStyle {
     Off = 0,
     On = 1,
-    Relative = 2
+    Relative = 2,
+    Interval = 3
 }
 
 /**
@@ -844,6 +846,37 @@ export enum IndentAction {
     Outdent = 3
 }
 
+export namespace SyntaxTokenType {
+    export function toString(v: SyntaxTokenType | unknown): 'other' | 'comment' | 'string' | 'regex' {
+        switch (v) {
+            case SyntaxTokenType.Other: return 'other';
+            case SyntaxTokenType.Comment: return 'comment';
+            case SyntaxTokenType.String: return 'string';
+            case SyntaxTokenType.RegEx: return 'regex';
+        }
+        return 'other';
+    }
+}
+
+export enum SyntaxTokenType {
+    /**
+     * Everything except tokens that are part of comments, string literals and regular expressions.
+     */
+    Other = 0,
+    /**
+     * A comment.
+     */
+    Comment = 1,
+    /**
+     * A string literal.
+     */
+    String = 2,
+    /**
+     * A regular expression.
+     */
+    RegEx = 3
+}
+
 @es5ClassCompat
 export class TextEdit {
 
@@ -1130,6 +1163,31 @@ export enum NotebookEditorRevealType {
     InCenterIfOutsideViewport = 2,
     AtTop = 3
 }
+
+export enum NotebookCellExecutionState {
+    /**
+     * The cell is idle.
+     */
+    Idle = 1,
+    /**
+     * Execution for the cell is pending.
+     */
+    Pending = 2,
+    /**
+     * The cell is currently executing.
+     */
+    Executing = 3,
+}
+
+export class NotebookKernelSourceAction {
+    description?: string;
+    detail?: string;
+    command?: theia.Command;
+    constructor(
+        public label: string
+    ) { }
+}
+
 @es5ClassCompat
 export class NotebookCellData implements theia.NotebookCellData {
     languageId: string;
@@ -1140,23 +1198,34 @@ export class NotebookCellData implements theia.NotebookCellData {
     metadata?: { [key: string]: any };
     executionSummary?: theia.NotebookCellExecutionSummary;
 
-    constructor(kind: NotebookCellKind, value: string, languageId: string) {
+    constructor(kind: NotebookCellKind, value: string, languageId: string,
+        outputs?: theia.NotebookCellOutput[], metadata?: Record<string, unknown>, executionSummary?: theia.NotebookCellExecutionSummary) {
         this.kind = kind;
         this.value = value;
         this.languageId = languageId;
+        this.outputs = outputs ?? [];
+        this.metadata = metadata;
+        this.executionSummary = executionSummary;
     }
 }
 
 @es5ClassCompat
 export class NotebookCellOutput implements theia.NotebookCellOutput {
+    outputId: string;
     items: theia.NotebookCellOutputItem[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     metadata?: { [key: string]: any };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    constructor(items: theia.NotebookCellOutputItem[], metadata?: { [key: string]: any }) {
+    constructor(items: theia.NotebookCellOutputItem[], idOrMetadata?: string | Record<string, any>, metadata?: { [key: string]: any }) {
         this.items = items;
-        this.metadata = metadata;
+        if (typeof idOrMetadata === 'string') {
+            this.outputId = idOrMetadata;
+            this.metadata = metadata;
+        } else {
+            this.outputId = UUID.uuid4();
+            this.metadata = idOrMetadata ?? metadata;
+        }
     }
 }
 
@@ -1227,41 +1296,18 @@ export class NotebookData implements theia.NotebookData {
     }
 }
 
-export class NotebookDocument implements theia.NotebookDocument {
-    readonly uri: theia.Uri;
-    readonly notebookType: string;
-    readonly version: number;
-    readonly isDirty: boolean;
-    readonly isUntitled: boolean;
-    readonly isClosed: boolean;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readonly metadata: { [key: string]: any };
-    readonly cellCount: number;
-
-    cellAt(index: number): theia.NotebookCell {
-        return {} as theia.NotebookCell;
-    }
-    save(): theia.Thenable<boolean> {
-        return Promise.resolve(false);
-    }
-
-    getCells(range?: theia.NotebookRange | undefined): theia.NotebookCell[] {
-        return [] as NotebookCell[];
-    }
-}
-export class NotebookCell implements theia.NotebookCell {
-    readonly index: number;
-    readonly notebook: theia.NotebookDocument;
-    readonly kind: theia.NotebookCellKind;
-    readonly document: theia.TextDocument;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readonly metadata: { readonly [key: string]: any; };
-    readonly outputs: readonly theia.NotebookCellOutput[];
-    readonly executionSummary: theia.NotebookCellExecutionSummary | undefined;
-
-}
-
 export class NotebookRange implements theia.NotebookRange {
+    static isNotebookRange(thing: unknown): thing is theia.NotebookRange {
+        if (thing instanceof NotebookRange) {
+            return true;
+        }
+        if (!thing) {
+            return false;
+        }
+        return typeof (<NotebookRange>thing).start === 'number'
+            && typeof (<NotebookRange>thing).end === 'number';
+    }
+
     readonly start: number;
     readonly end: number;
     readonly isEmpty: boolean;
@@ -1322,27 +1368,58 @@ export class NotebookEdit implements theia.NotebookEdit {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     newNotebookMetadata?: { [key: string]: any; } | undefined;
 
+    static isNotebookCellEdit(thing: unknown): thing is NotebookEdit {
+        if (thing instanceof NotebookEdit) {
+            return true;
+        }
+        if (!thing) {
+            return false;
+        }
+        return NotebookRange.isNotebookRange((<NotebookEdit>thing))
+            && Array.isArray((<NotebookEdit>thing).newCells);
+    }
+
     static replaceCells(range: NotebookRange, newCells: NotebookCellData[]): NotebookEdit {
-        return new NotebookEdit();
+        return new NotebookEdit(range, newCells);
     }
 
     static insertCells(index: number, newCells: NotebookCellData[]): NotebookEdit {
-        return new NotebookEdit();
+        return new NotebookEdit(new NotebookRange(index, index), newCells);
     }
 
     static deleteCells(range: NotebookRange): NotebookEdit {
-        return new NotebookEdit();
+        return new NotebookEdit(range, []);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     static updateCellMetadata(index: number, newCellMetadata: { [key: string]: any }): NotebookEdit {
-        return new NotebookEdit();
+        return new NotebookEdit(new NotebookRange(index, index), [], newCellMetadata);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     static updateNotebookMetadata(newNotebookMetadata: { [key: string]: any }): NotebookEdit {
-        return new NotebookEdit();
+        return new NotebookEdit(new NotebookRange(0, 0), [], undefined, newNotebookMetadata);
     }
+
+    constructor(range: NotebookRange, newCells: NotebookCellData[], newCellMetadata?: { [key: string]: unknown }, newNotebookMetadata?: { [key: string]: unknown }) {
+        this.range = range;
+        this.newCells = newCells;
+        this.newCellMetadata = newCellMetadata;
+        this.newNotebookMetadata = newNotebookMetadata;
+    }
+
+}
+
+export class NotebookRendererScript implements theia.NotebookRendererScript {
+    provides: readonly string[];
+
+    constructor(
+        public uri: theia.Uri,
+        provides?: string | readonly string[]
+    ) {
+        this.provides = Array.isArray(provides) ? provides : [provides];
+    };
+
 }
 
 @es5ClassCompat
@@ -1517,6 +1594,30 @@ export class DocumentHighlight {
     }
 }
 
+@es5ClassCompat
+export class MultiDocumentHighlight {
+
+    /**
+     * The URI of the document containing the highlights.
+     */
+    uri: URI;
+
+    /**
+     * The highlights for the document.
+     */
+    highlights: DocumentHighlight[];
+
+    /**
+     * Creates a new instance of MultiDocumentHighlight.
+     * @param uri The URI of the document containing the highlights.
+     * @param highlights The highlights for the document.
+     */
+    constructor(uri: URI, highlights: DocumentHighlight[]) {
+        this.uri = uri;
+        this.highlights = highlights;
+    }
+}
+
 export type Definition = Location | Location[];
 
 @es5ClassCompat
@@ -1542,6 +1643,13 @@ export class DocumentLink {
 
 @es5ClassCompat
 export class DocumentDropEdit {
+
+    id?: string;
+
+    priority?: number;
+
+    label?: string;
+
     insertText: string | SnippetString;
 
     additionalEdit?: WorkspaceEdit;
@@ -1605,6 +1713,7 @@ export class CodeActionKind {
     public static readonly Source = CodeActionKind.Empty.append('source');
     public static readonly SourceOrganizeImports = CodeActionKind.Source.append('organizeImports');
     public static readonly SourceFixAll = CodeActionKind.Source.append('fixAll');
+    public static readonly Notebook = CodeActionKind.Empty.append('notebook');
 
     constructor(
         public readonly value: string
@@ -1674,6 +1783,9 @@ export interface WorkspaceEditMetadata {
 export const enum FileEditType {
     File = 1,
     Text = 2,
+    // eslint-disable-next-line @typescript-eslint/no-shadow
+    Cell = 3,
+    CellReplace = 5,
     Snippet = 6,
 }
 
@@ -1700,7 +1812,24 @@ export interface FileSnippetTextEdit {
     readonly metadata?: theia.WorkspaceEditEntryMetadata;
 }
 
-type WorkspaceEditEntry = FileOperation | FileTextEdit | FileSnippetTextEdit | undefined;
+export interface FileCellEdit {
+    readonly _type: FileEditType.Cell;
+    readonly uri: URI;
+    readonly edit?: CellMetadataEdit | NotebookDocumentMetadataEdit;
+    readonly notebookMetadata?: Record<string, unknown>;
+    readonly metadata?: theia.WorkspaceEditEntryMetadata;
+}
+
+export interface CellEdit {
+    readonly _type: FileEditType.CellReplace;
+    readonly metadata?: theia.WorkspaceEditEntryMetadata;
+    readonly uri: URI;
+    readonly index: number;
+    readonly count: number;
+    readonly cells: theia.NotebookCellData[];
+}
+
+type WorkspaceEditEntry = FileOperation | FileTextEdit | FileSnippetTextEdit | FileCellEdit | CellEdit | undefined;
 
 @es5ClassCompat
 export class WorkspaceEdit implements theia.WorkspaceEdit {
@@ -1741,9 +1870,13 @@ export class WorkspaceEdit implements theia.WorkspaceEdit {
     }
 
     set(uri: URI, edits: ReadonlyArray<TextEdit | SnippetTextEdit>): void;
-    set(uri: URI, edits: ReadonlyArray<[TextEdit | SnippetTextEdit, theia.WorkspaceEditEntryMetadata]>): void;
+    set(uri: URI, edits: ReadonlyArray<[TextEdit | SnippetTextEdit, theia.WorkspaceEditEntryMetadata | undefined]>): void;
+    set(uri: URI, edits: ReadonlyArray<NotebookEdit>): void;
+    set(uri: URI, edits: ReadonlyArray<[NotebookEdit, theia.WorkspaceEditEntryMetadata | undefined]>): void;
 
-    set(uri: URI, edits: ReadonlyArray<TextEdit | SnippetTextEdit | [TextEdit | SnippetTextEdit, theia.WorkspaceEditEntryMetadata]>): void {
+    set(uri: URI, edits: ReadonlyArray<TextEdit | SnippetTextEdit
+        | NotebookEdit | [NotebookEdit, theia.WorkspaceEditEntryMetadata | undefined]
+        | [TextEdit | SnippetTextEdit, theia.WorkspaceEditEntryMetadata | undefined]>): void {
         if (!edits) {
             // remove all text edits for `uri`
             for (let i = 0; i < this._edits.length; i++) {
@@ -1762,7 +1895,7 @@ export class WorkspaceEdit implements theia.WorkspaceEdit {
                     continue;
                 }
 
-                let edit: TextEdit | SnippetTextEdit;
+                let edit: TextEdit | SnippetTextEdit | NotebookEdit;
                 let metadata: theia.WorkspaceEditEntryMetadata | undefined;
                 if (Array.isArray(editOrTuple)) {
                     edit = editOrTuple[0];
@@ -1771,7 +1904,27 @@ export class WorkspaceEdit implements theia.WorkspaceEdit {
                     edit = editOrTuple;
                 }
 
-                if (SnippetTextEdit.isSnippetTextEdit(edit)) {
+                if (NotebookEdit.isNotebookCellEdit(edit)) {
+                    if (edit.newCellMetadata) {
+                        this._edits.push({
+                            _type: FileEditType.Cell, metadata, uri,
+                            edit: { editType: CellEditType.Metadata, index: edit.range.start, metadata: edit.newCellMetadata }
+                        });
+                    } else if (edit.newNotebookMetadata) {
+                        this._edits.push({
+                            _type: FileEditType.Cell, metadata, uri,
+                            edit: { editType: CellEditType.DocumentMetadata, metadata: edit.newNotebookMetadata }, notebookMetadata: edit.newNotebookMetadata
+                        });
+                    } else {
+                        const start = edit.range.start;
+                        const end = edit.range.end;
+
+                        if (start !== end || edit.newCells.length > 0) {
+                            this._edits.push({ _type: FileEditType.CellReplace, uri, index: start, count: end - start, cells: edit.newCells, metadata });
+                        }
+                    }
+
+                } else if (SnippetTextEdit.isSnippetTextEdit(edit)) {
                     this._edits.push({ _type: FileEditType.Snippet, uri, range: edit.range, edit, metadata });
                 } else {
                     this._edits.push({ _type: FileEditType.Text, uri, edit });
@@ -1810,19 +1963,23 @@ export class WorkspaceEdit implements theia.WorkspaceEdit {
         return result;
     }
 
-    _allEntries(): ([URI, Array<TextEdit | SnippetTextEdit>, theia.WorkspaceEditEntryMetadata] | [URI, URI, FileOperationOptions, WorkspaceEditMetadata])[] {
-        const res: ([URI, Array<TextEdit | SnippetTextEdit>, theia.WorkspaceEditEntryMetadata] | [URI, URI, FileOperationOptions, WorkspaceEditMetadata])[] = [];
-        for (const edit of this._edits) {
-            if (!edit) {
-                continue;
-            }
-            if (edit._type === FileEditType.File) {
-                res.push([edit.from!, edit.to!, edit.options!, edit.metadata!]);
-            } else {
-                res.push([edit.uri, [edit.edit], edit.metadata!]);
-            }
-        }
-        return res;
+    // _allEntries(): ([URI, Array<TextEdit | SnippetTextEdit>, theia.WorkspaceEditEntryMetadata] | [URI, URI, FileOperationOptions, WorkspaceEditMetadata])[] {
+    //     const res: ([URI, Array<TextEdit | SnippetTextEdit>, theia.WorkspaceEditEntryMetadata] | [URI, URI, FileOperationOptions, WorkspaceEditMetadata])[] = [];
+    //     for (const edit of this._edits) {
+    //         if (!edit) {
+    //             continue;
+    //         }
+    //         if (edit._type === FileEditType.File) {
+    //             res.push([edit.from!, edit.to!, edit.options!, edit.metadata!]);
+    //         } else {
+    //             res.push([edit.uri, [edit.edit], edit.metadata!]);
+    //         }
+    //     }
+    //     return res;
+    // }
+
+    _allEntries(): ReadonlyArray<WorkspaceEditEntry> {
+        return this._edits;
     }
 
     get size(): number {
@@ -1901,6 +2058,12 @@ export class TreeItem {
 
     contextValue?: string;
 
+    checkboxState?: theia.TreeItemCheckboxState | {
+        readonly state: theia.TreeItemCheckboxState;
+        readonly tooltip?: string;
+        readonly accessibilityInformation?: AccessibilityInformation
+    };
+
     constructor(label: string | theia.TreeItemLabel, collapsibleState?: theia.TreeItemCollapsibleState)
     constructor(resourceUri: URI, collapsibleState?: theia.TreeItemCollapsibleState)
     constructor(arg1: string | theia.TreeItemLabel | URI, public collapsibleState: theia.TreeItemCollapsibleState = TreeItemCollapsibleState.None) {
@@ -1916,6 +2079,11 @@ export enum TreeItemCollapsibleState {
     None = 0,
     Collapsed = 1,
     Expanded = 2
+}
+
+export enum TreeItemCheckboxState {
+    Unchecked = 0,
+    Checked = 1
 }
 
 export enum SymbolTag {
@@ -2070,11 +2238,6 @@ export enum TerminalExitReason {
     Process = 2,
     User = 3,
     Extension = 4,
-}
-
-export enum TerminalQuickFixType {
-    command = 'command',
-    opener = 'opener'
 }
 
 @es5ClassCompat
@@ -3116,6 +3279,16 @@ export class LinkedEditingRanges {
     }
 }
 
+// Copied from https://github.com/microsoft/vscode/blob/1.72.2/src/vs/workbench/api/common/extHostTypes.ts
+export enum TestResultState {
+    Queued = 1,
+    Running = 2,
+    Passed = 3,
+    Failed = 4,
+    Skipped = 5,
+    Errored = 6
+}
+
 export enum TestRunProfileKind {
     Run = 1,
     Debug = 2,
@@ -3127,8 +3300,11 @@ export class TestTag implements theia.TestTag {
     constructor(public readonly id: string) { }
 }
 
+let nextTestRunId = 0;
 @es5ClassCompat
 export class TestRunRequest implements theia.TestRunRequest {
+    testRunId: number = nextTestRunId++;
+
     constructor(
         public readonly include: theia.TestItem[] | undefined = undefined,
         public readonly exclude: theia.TestItem[] | undefined = undefined,
@@ -3142,6 +3318,7 @@ export class TestMessage implements theia.TestMessage {
     public expectedOutput?: string;
     public actualOutput?: string;
     public location?: theia.Location;
+    public contextValue?: string;
 
     public static diff(message: string | theia.MarkdownString, expected: string, actual: string): theia.TestMessage {
         const msg = new TestMessage(message);
@@ -3499,11 +3676,16 @@ export class InteractiveWindowInput {
 // #region DocumentPaste
 @es5ClassCompat
 export class DocumentPasteEdit {
-    constructor(insertText: string | SnippetString) {
+    constructor(insertText: string | SnippetString, id: string, label: string) {
         this.insertText = insertText;
+        this.id = id;
+        this.label = label;
     }
     insertText: string | SnippetString;
     additionalEdit?: WorkspaceEdit;
+    id: string;
+    label: string;
+    priority?: number;
 }
 // #endregion
 
@@ -3514,3 +3696,30 @@ export enum EditSessionIdentityMatch {
     None = 0
 }
 // #endregion
+
+// #region terminalQuickFixProvider
+export class TerminalQuickFixTerminalCommand {
+    /**
+     * The terminal command to run
+     */
+    terminalCommand: string;
+    /**
+     * Whether the command should be executed or just inserted (default)
+     */
+    shouldExecute?: boolean;
+    /**
+     * @stubbed
+     */
+    constructor(terminalCommand: string, shouldExecute?: boolean) { }
+}
+export class TerminalQuickFixOpener {
+    /**
+     * The uri to open
+     */
+    uri: theia.Uri;
+    /**
+     * @stubbed
+     */
+    constructor(uri: theia.Uri) { }
+}
+

@@ -18,7 +18,7 @@ import { inject, injectable, postConstruct } from 'inversify';
 import { Command, CommandContribution, CommandRegistry, isOSX, isWindows, MenuModelRegistry, MenuContribution, Disposable, nls } from '../../common';
 import {
     codicon, ConfirmDialog, KeybindingContribution, KeybindingRegistry, PreferenceScope, Widget,
-    FrontendApplication, FrontendApplicationContribution, CommonMenus, CommonCommands, Dialog, Message, ApplicationShell,
+    FrontendApplication, FrontendApplicationContribution, CommonMenus, CommonCommands, Dialog, Message, ApplicationShell, PreferenceService, animationFrame,
 } from '../../browser';
 import { ElectronMainMenuFactory } from './electron-main-menu-factory';
 import { FrontendApplicationStateService, FrontendApplicationState } from '../../browser/frontend-application-state';
@@ -30,6 +30,8 @@ import { WindowTitleService } from '../../browser/window/window-title-service';
 
 import '../../../src/electron-browser/menu/electron-menu-style.css';
 import { MenuDto } from '../../electron-common/electron-api';
+import { ThemeService } from '../../browser/theming';
+import { ThemeChangeEvent } from '../../common/theme';
 
 export namespace ElectronCommands {
     export const TOGGLE_DEVELOPER_TOOLS = Command.toDefaultLocalizedCommand({
@@ -88,6 +90,9 @@ export class ElectronMenuContribution extends BrowserMenuBarContribution impleme
     @inject(WindowService)
     protected readonly windowService: WindowService;
 
+    @inject(ThemeService)
+    protected readonly themeService: ThemeService;
+
     @inject(CustomTitleWidgetFactory)
     protected readonly customTitleWidgetFactory: CustomTitleWidgetFactory;
 
@@ -123,6 +128,9 @@ export class ElectronMenuContribution extends BrowserMenuBarContribution impleme
             this.handleToggleMaximized();
         });
         this.attachMenuBarVisibilityListener();
+        this.themeService.onDidColorThemeChange(e => {
+            this.handleThemeChange(e);
+        });
     }
 
     protected attachWindowFocusListener(app: FrontendApplication): void {
@@ -414,6 +422,11 @@ export class ElectronMenuContribution extends BrowserMenuBarContribution impleme
         }
     }
 
+    protected handleThemeChange(e: ThemeChangeEvent): void {
+        const backgroundColor = window.getComputedStyle(document.body).backgroundColor;
+        window.electronTheiaCore.setBackgroundColor(backgroundColor);
+    }
+
 }
 
 @injectable()
@@ -428,6 +441,9 @@ export class CustomTitleWidget extends Widget {
     @inject(ApplicationShell)
     protected readonly applicationShell: ApplicationShell;
 
+    @inject(PreferenceService)
+    protected readonly preferenceService: PreferenceService;
+
     constructor() {
         super();
         this.id = 'theia-custom-title';
@@ -438,6 +454,11 @@ export class CustomTitleWidget extends Widget {
         this.updateTitle(this.windowTitleService.title);
         this.windowTitleService.onDidChangeTitle(title => {
             this.updateTitle(title);
+        });
+        this.preferenceService.onPreferenceChanged(e => {
+            if (e.preferenceName === 'window.menuBarVisibility') {
+                animationFrame().then(() => this.adjustTitleToCenter());
+            }
         });
     }
 

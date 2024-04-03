@@ -16,7 +16,7 @@
 
 // @ts-check
 describe('Saveable', function () {
-    this.timeout(5000);
+    this.timeout(30000);
 
     const { assert } = chai;
 
@@ -245,7 +245,7 @@ describe('Saveable', function () {
             shouldSave: () => true
         });
         assert.isTrue(outOfSync, 'file should be out of sync');
-        assert.isTrue(widget.isDisposed, 'model should be disposed after close');
+        assert.isFalse(widget.isDisposed, 'model should not be disposed after close when we reject the save');
         const state = await fileService.read(fileUri);
         assert.equal(state.value, 'foo2', 'fs should NOT be updated');
     });

@@ -17,7 +17,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as temp from 'temp';
 
 import type { Compiler } from 'webpack';
 
@@ -28,6 +27,7 @@ const REQUIRE_KEYMAPPING = './build/Release/keymapping';
 
 export interface NativeWebpackPluginOptions {
     out: string;
+    trash: boolean;
     ripgrep: boolean;
     pty: boolean;
     replacements?: Record<string, string>;
@@ -38,11 +38,9 @@ export class NativeWebpackPlugin {
 
     private bindings = new Map<string, string>();
     private options: NativeWebpackPluginOptions;
-    private tracker: typeof temp;
 
     constructor(options: NativeWebpackPluginOptions) {
         this.options = options;
-        this.tracker = temp.track();
         for (const [name, value] of Object.entries(options.nativeBindings ?? {})) {
             this.nativeBinding(name, value);
         }
@@ -54,12 +52,19 @@ export class NativeWebpackPlugin {
 
     apply(compiler: Compiler): void {
         let replacements: Record<string, string> = {};
-        compiler.hooks.initialize.tap(NativeWebpackPlugin.name, () => {
-            const directory = this.tracker.mkdirSync({
-                dir: path.resolve(compiler.outputPath, 'native-webpack-plugin')
+        compiler.hooks.initialize.tap(NativeWebpackPlugin.name, async () => {
+            const directory = path.resolve(compiler.outputPath, 'native-webpack-plugin');
+            if (fs.existsSync(directory)) {
+                await fs.promises.rm(directory, {
+                    force: true,
+                    recursive: true
+                });
+            }
+            await fs.promises.mkdir(directory, {
+                recursive: true
             });
-            const bindingsFile = buildFile(directory, 'bindings.js', bindingsReplacement(Array.from(this.bindings.entries())));
-            const ripgrepFile = buildFile(directory, 'ripgrep.js', ripgrepReplacement(this.options.out));
+            const bindingsFile = await buildFile(directory, 'bindings.js', bindingsReplacement(Array.from(this.bindings.entries())));
+            const ripgrepFile = await buildFile(directory, 'ripgrep.js', ripgrepReplacement(this.options.out));
             const keymappingFile = './build/Release/keymapping.node';
             const windowsCaCertsFile = '@vscode/windows-ca-certs/build/Release/crypt32.node';
             replacements = {
@@ -90,17 +95,16 @@ export class NativeWebpackPlugin {
                 });
             }
         );
-        compiler.hooks.afterEmit.tapAsync(NativeWebpackPlugin.name, async () => {
+        compiler.hooks.afterEmit.tapPromise(NativeWebpackPlugin.name, async () => {
+            if (this.options.trash) {
+                await this.copyTrashHelper(compiler);
+            }
             if (this.options.ripgrep) {
                 await this.copyRipgrep(compiler);
             }
             if (this.options.pty) {
                 await this.copyNodePtySpawnHelper(compiler);
             }
-            this.tracker.cleanupSync();
-        });
-        compiler.hooks.failed.tap(NativeWebpackPlugin.name, async () => {
-            this.tracker.cleanupSync();
         });
     }
 
@@ -127,6 +131,21 @@ export class NativeWebpackPlugin {
         }
     }
 
+    protected async copyTrashHelper(compiler: Compiler): Promise<void> {
+        let sourceFile: string | undefined;
+        let targetFile: string | undefined;
+        if (process.platform === 'win32') {
+            sourceFile = require.resolve('trash/lib/windows-trash.exe');
+            targetFile = path.join(compiler.outputPath, 'windows-trash.exe');
+        } else if (process.platform === 'darwin') {
+            sourceFile = require.resolve('trash/lib/macos-trash');
+            targetFile = path.join(compiler.outputPath, 'macos-trash');
+        }
+        if (sourceFile && targetFile) {
+            await this.copyExecutable(sourceFile, targetFile);
+        }
+    }
+
     protected async copyExecutable(source: string, target: string): Promise<void> {
         const targetDirectory = path.dirname(target);
         await fs.promises.mkdir(targetDirectory, { recursive: true });
@@ -135,9 +154,9 @@ export class NativeWebpackPlugin {
     }
 }
 
-function buildFile(root: string, name: string, content: string): string {
+async function buildFile(root: string, name: string, content: string): Promise<string> {
     const tmpFile = path.join(root, name);
-    fs.writeFileSync(tmpFile, content);
+    await fs.promises.writeFile(tmpFile, content);
     return tmpFile;
 }
 

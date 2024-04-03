@@ -14,6 +14,7 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
+import * as dns from 'dns';
 import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
@@ -29,6 +30,8 @@ import { AddressInfo } from 'net';
 import { ApplicationPackage } from '@theia/application-package';
 import { ProcessUtils } from './process-utils';
 
+export type DnsResultOrder = 'ipv4first' | 'verbatim' | 'nodeDefault';
+
 const APP_PROJECT_PATH = 'app-project-path';
 
 const TIMER_WARNING_THRESHOLD = 50;
@@ -36,6 +39,7 @@ const TIMER_WARNING_THRESHOLD = 50;
 const DEFAULT_PORT = environment.electron.is() ? 0 : 3000;
 const DEFAULT_HOST = 'localhost';
 const DEFAULT_SSL = false;
+const DEFAULT_DNS_DEFAULT_RESULT_ORDER: DnsResultOrder = 'ipv4first';
 
 export const BackendApplicationServer = Symbol('BackendApplicationServer');
 /**
@@ -107,6 +111,7 @@ export class BackendApplicationCliContribution implements CliContribution {
 
     port: number;
     hostname: string | undefined;
+    dnsDefaultResultOrder: DnsResultOrder = DEFAULT_DNS_DEFAULT_RESULT_ORDER;
     ssl: boolean | undefined;
     cert: string | undefined;
     certkey: string | undefined;
@@ -119,6 +124,12 @@ export class BackendApplicationCliContribution implements CliContribution {
         conf.option('cert', { description: 'Path to SSL certificate.', type: 'string' });
         conf.option('certkey', { description: 'Path to SSL certificate key.', type: 'string' });
         conf.option(APP_PROJECT_PATH, { description: 'Sets the application project directory', default: this.appProjectPath() });
+        conf.option('dnsDefaultResultOrder', {
+            type: 'string',
+            description: 'Configure Node\'s DNS resolver default behavior, see https://nodejs.org/docs/latest-v18.x/api/dns.html#dnssetdefaultresultorderorder',
+            choices: ['ipv4first', 'verbatim', 'nodeDefault'],
+            default: DEFAULT_DNS_DEFAULT_RESULT_ORDER
+        });
     }
 
     setArguments(args: yargs.Arguments): void {
@@ -128,6 +139,7 @@ export class BackendApplicationCliContribution implements CliContribution {
         this.cert = args.cert as string;
         this.certkey = args.certkey as string;
         this.projectPath = args[APP_PROJECT_PATH] as string;
+        this.dnsDefaultResultOrder = args.dnsDefaultResultOrder as DnsResultOrder;
     }
 
     protected appProjectPath(): string {
@@ -158,6 +170,8 @@ export class BackendApplication {
     @inject(Stopwatch)
     protected readonly stopwatch: Stopwatch;
 
+    private _configured: Promise<void>;
+
     constructor(
         @inject(ContributionProvider) @named(BackendApplicationContribution)
         protected readonly contributionsProvider: ContributionProvider<BackendApplicationContribution>,
@@ -186,7 +200,7 @@ export class BackendApplication {
     }
 
     protected async initialize(): Promise<void> {
-        for (const contribution of this.contributionsProvider.getContributions()) {
+        await Promise.all(this.contributionsProvider.getContributions().map(async contribution => {
             if (contribution.initialize) {
                 try {
                     await this.measure(contribution.constructor.name + '.initialize',
@@ -196,18 +210,20 @@ export class BackendApplication {
                     console.error('Could not initialize contribution', error);
                 }
             }
-        }
+        }));
+    }
+
+    get configured(): Promise<void> {
+        return this._configured;
     }
 
     @postConstruct()
     protected init(): void {
-        this.configure();
+        this._configured = this.configure();
     }
 
     protected async configure(): Promise<void> {
-        // Do not await the initialization because contributions are expected to handle
-        // concurrent initialize/configure in undefined order if they provide both
-        this.initialize();
+        await this.initialize();
 
         this.app.get('*.js', this.serveGzipped.bind(this, 'text/javascript'));
         this.app.get('*.js.map', this.serveGzipped.bind(this, 'application/json'));
@@ -216,27 +232,34 @@ export class BackendApplication {
         this.app.get('*.gif', this.serveGzipped.bind(this, 'image/gif'));
         this.app.get('*.png', this.serveGzipped.bind(this, 'image/png'));
         this.app.get('*.svg', this.serveGzipped.bind(this, 'image/svg+xml'));
+        this.app.get('*.eot', this.serveGzipped.bind(this, 'application/vnd.ms-fontobject'));
+        this.app.get('*.ttf', this.serveGzipped.bind(this, 'font/ttf'));
+        this.app.get('*.woff', this.serveGzipped.bind(this, 'font/woff'));
+        this.app.get('*.woff2', this.serveGzipped.bind(this, 'font/woff2'));
 
-        for (const contribution of this.contributionsProvider.getContributions()) {
+        await Promise.all(this.contributionsProvider.getContributions().map(async contribution => {
             if (contribution.configure) {
                 try {
-                    await this.measure(contribution.constructor.name + '.configure',
-                        () => contribution.configure!(this.app)
-                    );
+                    await contribution.configure!(this.app);
                 } catch (error) {
                     console.error('Could not configure contribution', error);
                 }
             }
-        }
+        }));
+        console.info('configured all backend app contributions');
     }
 
     use(...handlers: express.Handler[]): void {
         this.app.use(...handlers);
     }
 
-    async start(aPort?: number, aHostname?: string): Promise<http.Server | https.Server> {
-        const hostname = aHostname !== undefined ? aHostname : this.cliParams.hostname;
-        const port = aPort !== undefined ? aPort : this.cliParams.port;
+    async start(port?: number, hostname?: string): Promise<http.Server | https.Server> {
+        hostname ??= this.cliParams.hostname;
+        port ??= this.cliParams.port;
+
+        if (this.cliParams.dnsDefaultResultOrder !== 'nodeDefault') {
+            dns.setDefaultResultOrder(this.cliParams.dnsDefaultResultOrder);
+        }
 
         const deferred = new Deferred<http.Server | https.Server>();
         let server: http.Server | https.Server;
@@ -279,8 +302,10 @@ export class BackendApplication {
         });
 
         server.listen(port, hostname, () => {
-            const scheme = this.cliParams.ssl ? 'https' : 'http';
-            console.info(`Theia app listening on ${scheme}://${hostname || 'localhost'}:${(server.address() as AddressInfo).port}.`);
+            // address should be defined at this point
+            const address = server.address()!;
+            const url = typeof address === 'string' ? address : this.getHttpUrl(address, this.cliParams.ssl);
+            console.info(`Theia app listening on ${url}.`);
             deferred.resolve(server);
         });
 
@@ -299,6 +324,13 @@ export class BackendApplication {
             }
         }
         return this.stopwatch.startAsync('server', 'Finished starting backend application', () => deferred.promise);
+    }
+
+    protected getHttpUrl({ address, port, family }: AddressInfo, ssl?: boolean): string {
+        const scheme = ssl ? 'https' : 'http';
+        return family.toLowerCase() === 'ipv6'
+            ? `${scheme}://[${address}]:${port}`
+            : `${scheme}://${address}:${port}`;
     }
 
     protected onStop(): void {

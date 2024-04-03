@@ -17,7 +17,7 @@ import { RpcServer } from '@theia/core/lib/common/messaging/proxy-factory';
 import { RPCProtocol } from './rpc-protocol';
 import { Disposable } from '@theia/core/lib/common/disposable';
 import { LogPart, KeysToAnyValues, KeysToKeysToAnyValue } from './types';
-import { CharacterPair, CommentRule, PluginAPIFactory, Plugin } from './plugin-api-rpc';
+import { CharacterPair, CommentRule, PluginAPIFactory, Plugin, ThemeIcon } from './plugin-api-rpc';
 import { ExtPluginApi } from './plugin-ext-api-contribution';
 import { IJSONSchema, IJSONSchemaSnippet } from '@theia/core/lib/common/json-schema';
 import { RecursivePartial } from '@theia/core/lib/common/types';
@@ -31,7 +31,7 @@ export { PluginIdentifiers };
 export const hostedServicePath = '/services/hostedPlugin';
 
 /**
- * Plugin engine (API) type, i.e. 'theiaPlugin', 'vscode', etc.
+ * Plugin engine (API) type, i.e. 'theiaPlugin', 'vscode', 'theiaHeadlessPlugin', etc.
  */
 export type PluginEngine = string;
 
@@ -49,6 +49,8 @@ export interface PluginPackage {
     theiaPlugin?: {
         frontend?: string;
         backend?: string;
+        /* Requires the `@theia/plugin-ext-headless` extension. */
+        headless?: string;
     };
     main?: string;
     browser?: string;
@@ -90,6 +92,7 @@ export interface PluginPackageContribution {
     snippets?: PluginPackageSnippetsContribution[];
     themes?: PluginThemeContribution[];
     iconThemes?: PluginIconThemeContribution[];
+    icons?: PluginIconContribution[];
     colors?: PluginColorContribution[];
     taskDefinitions?: PluginTaskDefinitionContribution[];
     problemMatchers?: PluginProblemMatcherContribution[];
@@ -99,6 +102,8 @@ export interface PluginPackageContribution {
     localizations?: PluginPackageLocalization[];
     terminal?: PluginPackageTerminal;
     notebooks?: PluginPackageNotebook[];
+    notebookRenderer?: PluginNotebookRendererContribution[];
+    notebookPreload?: PluginPackageNotebookPreload[];
 }
 
 export interface PluginPackageNotebook {
@@ -106,6 +111,19 @@ export interface PluginPackageNotebook {
     displayName: string;
     selector?: readonly { filenamePattern?: string; excludeFileNamePattern?: string }[];
     priority?: string;
+}
+
+export interface PluginNotebookRendererContribution {
+    readonly id: string;
+    readonly displayName: string;
+    readonly mimeTypes: string[];
+    readonly entrypoint: string | { readonly extends: string; readonly path: string };
+    readonly requiresMessaging?: 'always' | 'optional' | 'never'
+}
+
+export interface PluginPackageNotebookPreload {
+    type: string;
+    entrypoint: string;
 }
 
 export interface PluginPackageAuthenticationProvider {
@@ -253,6 +271,13 @@ export interface PluginIconThemeContribution {
     uiTheme?: PluginUiTheme;
 }
 
+export interface PluginIconContribution {
+    [id: string]: {
+        description: string;
+        default: { fontPath: string; fontCharacter: string } | string;
+    };
+}
+
 export interface PlatformSpecificAdapterContribution {
     program?: string;
     args?: string[];
@@ -291,6 +316,7 @@ export interface PluginPackageLanguageContribution {
     aliases?: string[];
     mimetypes?: string[];
     configuration?: string;
+    icon?: IconUrl;
 }
 
 export interface PluginPackageLanguageContributionConfiguration {
@@ -348,7 +374,7 @@ export interface PluginScanner {
      */
     getLifecycle(plugin: PluginPackage): PluginLifecycle;
 
-    getContribution(plugin: PluginPackage): PluginContribution | undefined;
+    getContribution(plugin: PluginPackage): Promise<PluginContribution | undefined>;
 
     /**
      * A mapping between a dependency as its defined in package.json
@@ -376,7 +402,7 @@ export interface PluginDeployerResolver {
 
 export const PluginDeployerDirectoryHandler = Symbol('PluginDeployerDirectoryHandler');
 export interface PluginDeployerDirectoryHandler {
-    accept(pluginDeployerEntry: PluginDeployerEntry): boolean;
+    accept(pluginDeployerEntry: PluginDeployerEntry): Promise<boolean>;
 
     handle(context: PluginDeployerDirectoryHandlerContext): Promise<void>;
 }
@@ -384,7 +410,7 @@ export interface PluginDeployerDirectoryHandler {
 export const PluginDeployerFileHandler = Symbol('PluginDeployerFileHandler');
 export interface PluginDeployerFileHandler {
 
-    accept(pluginDeployerEntry: PluginDeployerEntry): boolean;
+    accept(pluginDeployerEntry: PluginDeployerEntry): Promise<boolean>;
 
     handle(context: PluginDeployerFileHandlerContext): Promise<void>;
 }
@@ -411,7 +437,7 @@ export interface PluginDeployerStartContext {
 export const PluginDeployer = Symbol('PluginDeployer');
 export interface PluginDeployer {
 
-    start(): void;
+    start(): Promise<void>;
 
 }
 
@@ -427,7 +453,9 @@ export enum PluginDeployerEntryType {
 
     FRONTEND,
 
-    BACKEND
+    BACKEND,
+
+    HEADLESS // Deployed in the Theia Node server outside the context of a frontend/backend connection
 }
 
 /**
@@ -477,9 +505,9 @@ export interface PluginDeployerEntry {
 
     getChanges(): string[];
 
-    isFile(): boolean;
+    isFile(): Promise<boolean>;
 
-    isDirectory(): boolean;
+    isDirectory(): Promise<boolean>;
 
     /**
      * Resolved if a resolver has handle this plugin
@@ -553,6 +581,7 @@ export interface PluginModel {
 export interface PluginEntryPoint {
     frontend?: string;
     backend?: string;
+    headless?: string;
 }
 
 /**
@@ -577,6 +606,7 @@ export interface PluginContribution {
     snippets?: SnippetContribution[];
     themes?: ThemeContribution[];
     iconThemes?: IconThemeContribution[];
+    icons?: IconContribution[];
     colors?: ColorDefinition[];
     taskDefinitions?: TaskDefinition[];
     problemMatchers?: ProblemMatcherContribution[];
@@ -585,13 +615,27 @@ export interface PluginContribution {
     localizations?: Localization[];
     terminalProfiles?: TerminalProfile[];
     notebooks?: NotebookContribution[];
+    notebookRenderer?: NotebookRendererContribution[];
+    notebookPreload?: notebookPreloadContribution[];
 }
-
 export interface NotebookContribution {
     type: string;
     displayName: string;
     selector?: readonly { filenamePattern?: string; excludeFileNamePattern?: string }[];
     priority?: string;
+}
+
+export interface NotebookRendererContribution {
+    readonly id: string;
+    readonly displayName: string;
+    readonly mimeTypes: string[];
+    readonly entrypoint: string | { readonly extends: string; readonly path: string };
+    readonly requiresMessaging?: 'always' | 'optional' | 'never'
+}
+
+export interface notebookPreloadContribution {
+    type: string;
+    entrypoint: string;
 }
 
 export interface AuthenticationProviderInformation {
@@ -616,8 +660,7 @@ export interface Localization {
 export interface Translation {
     id: string;
     path: string;
-    version: string;
-    contents: { [scope: string]: { [key: string]: string } }
+    cachedContents?: { [scope: string]: { [key: string]: string } };
 }
 
 export interface SnippetContribution {
@@ -642,6 +685,26 @@ export interface IconThemeContribution {
     description?: string;
     uri: string;
     uiTheme?: UiTheme;
+}
+
+export interface IconDefinition {
+    fontCharacter: string;
+    location: string;
+}
+
+export type IconDefaults = ThemeIcon | IconDefinition;
+
+export interface IconContribution {
+    id: string;
+    extensionId: string;
+    description: string | undefined;
+    defaults: IconDefaults;
+}
+
+export namespace IconContribution {
+    export function isIconDefinition(defaults: IconDefaults): defaults is IconDefinition {
+        return 'fontCharacter' in defaults;
+    }
 }
 
 export interface GrammarsContribution {
@@ -669,6 +732,10 @@ export interface LanguageContribution {
     aliases?: string[];
     mimetypes?: string[];
     configuration?: LanguageConfiguration;
+    /**
+     * @internal
+     */
+    icon?: IconUrl;
 }
 
 export interface RegExpOptions {
@@ -697,7 +764,9 @@ export interface DebuggerContribution extends PlatformSpecificAdapterContributio
     enableBreakpointsFor?: {
         languageIds: string[]
     },
-    configurationAttributes?: IJSONSchema[],
+    configurationAttributes?: {
+        [request: string]: IJSONSchema
+    },
     configurationSnippets?: IJSONSchemaSnippet[],
     variables?: ScopeMap,
     adapterExecutableCommand?: string

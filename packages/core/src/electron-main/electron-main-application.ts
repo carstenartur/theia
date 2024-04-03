@@ -15,15 +15,16 @@
 // *****************************************************************************
 
 import { inject, injectable, named } from 'inversify';
-import { screen, app, BrowserWindow, WebContents, Event as ElectronEvent, BrowserWindowConstructorOptions, nativeImage } from '../../electron-shared/electron';
+import { screen, app, BrowserWindow, WebContents, Event as ElectronEvent, BrowserWindowConstructorOptions, nativeImage, nativeTheme } from '../../electron-shared/electron';
 import * as path from 'path';
 import { Argv } from 'yargs';
 import { AddressInfo } from 'net';
 import { promises as fs } from 'fs';
+import { existsSync, mkdirSync } from 'fs-extra';
 import { fork, ForkOptions } from 'child_process';
-import { FrontendApplicationConfig } from '@theia/application-package/lib/application-props';
+import { DefaultTheme, FrontendApplicationConfig } from '@theia/application-package/lib/application-props';
 import URI from '../common/uri';
-import { FileUri } from '../node/file-uri';
+import { FileUri } from '../common/file-uri';
 import { Deferred } from '../common/promise-util';
 import { MaybePromise } from '../common/types';
 import { ContributionProvider } from '../common/contribution-provider';
@@ -31,7 +32,7 @@ import { ElectronSecurityTokenService } from './electron-security-token-service'
 import { ElectronSecurityToken } from '../electron-common/electron-token';
 import Storage = require('electron-store');
 import { Disposable, DisposableCollection, isOSX, isWindows } from '../common';
-import { DEFAULT_WINDOW_HASH } from '../common/window';
+import { DEFAULT_WINDOW_HASH, WindowSearchParams } from '../common/window';
 import { TheiaBrowserWindowOptions, TheiaElectronWindow, TheiaElectronWindowFactory } from './theia-electron-window';
 import { ElectronMainApplicationGlobals } from './electron-main-constants';
 import { createDisposableListener } from './event-utils';
@@ -53,19 +54,13 @@ export interface ElectronMainCommandOptions {
      */
     readonly file?: string;
 
-}
-
-/**
- * Fields related to a launch event.
- *
- * This kind of event is triggered in two different contexts:
- *  1. The app is launched for the first time, `secondInstance` is false.
- *  2. The app is already running but user relaunches it, `secondInstance` is true.
- */
-export interface ElectronMainExecutionParams {
-    readonly secondInstance: boolean;
-    readonly argv: string[];
     readonly cwd: string;
+
+    /**
+     * If the app is launched for the first time, `secondInstance` is false.
+     * If the app is already running but user relaunches it, `secondInstance` is true.
+     */
+    readonly secondInstance: boolean;
 }
 
 /**
@@ -171,6 +166,8 @@ export class ElectronMainApplication {
     @inject(TheiaElectronWindowFactory)
     protected readonly windowFactory: TheiaElectronWindowFactory;
 
+    protected isPortable = this.makePortable();
+
     protected readonly electronStore = new Storage<{
         windowstate?: TheiaBrowserWindowOptions
     }>();
@@ -180,9 +177,12 @@ export class ElectronMainApplication {
 
     protected _config: FrontendApplicationConfig | undefined;
     protected useNativeWindowFrame: boolean = true;
+    protected customBackgroundColor?: string;
     protected didUseNativeWindowFrameOnStart = new Map<number, boolean>();
     protected windows = new Map<number, TheiaElectronWindow>();
     protected restarting = false;
+
+    protected initialWindow?: BrowserWindow;
 
     get config(): FrontendApplicationConfig {
         if (!this._config) {
@@ -191,23 +191,59 @@ export class ElectronMainApplication {
         return this._config;
     }
 
+    protected makePortable(): boolean {
+        const dataFolderPath = path.join(app.getAppPath(), 'data');
+        const appDataPath = path.join(dataFolderPath, 'app-data');
+        if (existsSync(dataFolderPath)) {
+            if (!existsSync(appDataPath)) {
+                mkdirSync(appDataPath);
+            }
+            app.setPath('userData', appDataPath);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     async start(config: FrontendApplicationConfig): Promise<void> {
-        this.useNativeWindowFrame = this.getTitleBarStyle(config) === 'native';
-        this._config = config;
-        this.hookApplicationEvents();
-        const port = await this.startBackend();
-        this._backendPort.resolve(port);
-        await app.whenReady();
-        await this.attachElectronSecurityToken(port);
-        await this.startContributions();
-        await this.launch({
-            secondInstance: false,
-            argv: this.processArgv.getProcessArgvWithoutBin(process.argv),
-            cwd: process.cwd()
-        });
+        const argv = this.processArgv.getProcessArgvWithoutBin(process.argv);
+        createYargs(argv, process.cwd())
+            .command('$0 [file]', false,
+                cmd => cmd
+                    .option('electronUserData', {
+                        type: 'string',
+                        describe: 'The area where the electron main process puts its data'
+                    })
+                    .positional('file', { type: 'string' }),
+                async args => {
+                    if (args.electronUserData) {
+                        console.info(`using electron user data area : '${args.electronUserData}'`);
+                        await fs.mkdir(args.electronUserData, { recursive: true });
+                        app.setPath('userData', args.electronUserData);
+                    }
+                    this.useNativeWindowFrame = this.getTitleBarStyle(config) === 'native';
+                    this._config = config;
+                    this.hookApplicationEvents();
+                    this.showInitialWindow();
+                    const port = await this.startBackend();
+                    this._backendPort.resolve(port);
+                    await app.whenReady();
+                    await this.attachElectronSecurityToken(port);
+                    await this.startContributions();
+
+                    this.handleMainCommand({
+                        file: args.file,
+                        cwd: process.cwd(),
+                        secondInstance: false
+                    });
+                },
+            ).parse();
     }
 
     protected getTitleBarStyle(config: FrontendApplicationConfig): 'native' | 'custom' {
+        if ('THEIA_ELECTRON_DISABLE_NATIVE_ELEMENTS' in process.env && process.env.THEIA_ELECTRON_DISABLE_NATIVE_ELEMENTS === '1') {
+            return 'custom';
+        }
         if (isOSX) {
             return 'native';
         }
@@ -226,6 +262,15 @@ export class ElectronMainApplication {
 
     public setTitleBarStyle(webContents: WebContents, style: string): void {
         this.useNativeWindowFrame = isOSX || style === 'native';
+        this.saveState(webContents);
+    }
+
+    setBackgroundColor(webContents: WebContents, backgroundColor: string): void {
+        this.customBackgroundColor = backgroundColor;
+        this.saveState(webContents);
+    }
+
+    protected saveState(webContents: Electron.WebContents): void {
         const browserWindow = BrowserWindow.fromWebContents(webContents);
         if (browserWindow) {
             this.saveWindowState(browserWindow);
@@ -242,13 +287,16 @@ export class ElectronMainApplication {
         return this.didUseNativeWindowFrameOnStart.get(webContents.id) ? 'native' : 'custom';
     }
 
-    protected async launch(params: ElectronMainExecutionParams): Promise<void> {
-        createYargs(params.argv, params.cwd)
-            .command('$0 [file]', false,
-                cmd => cmd
-                    .positional('file', { type: 'string' }),
-                args => this.handleMainCommand(params, { file: args.file }),
-            ).parse();
+    protected showInitialWindow(): void {
+        if (this.config.electron.showWindowEarly &&
+            !('THEIA_ELECTRON_NO_EARLY_WINDOW' in process.env && process.env.THEIA_ELECTRON_NO_EARLY_WINDOW === '1')) {
+            console.log('Showing main window early');
+            app.whenReady().then(async () => {
+                const options = await this.getLastWindowOptions();
+                this.initialWindow = await this.createWindow({ ...options });
+                this.initialWindow.show();
+            });
+        }
     }
 
     /**
@@ -303,6 +351,7 @@ export class ElectronMainApplication {
         return {
             show: false,
             title: this.config.applicationName,
+            backgroundColor: DefaultTheme.defaultBackgroundColor(this.config.electron.windowOptions?.darkTheme || nativeTheme.shouldUseDarkColors),
             minWidth: 200,
             minHeight: 120,
             webPreferences: {
@@ -319,17 +368,28 @@ export class ElectronMainApplication {
         };
     }
 
-    async openDefaultWindow(): Promise<BrowserWindow> {
-        const [uri, electronWindow] = await Promise.all([this.createWindowUri(), this.createWindow()]);
+    async openDefaultWindow(params?: WindowSearchParams): Promise<BrowserWindow> {
+        const options = this.getDefaultTheiaWindowOptions();
+        const [uri, electronWindow] = await Promise.all([this.createWindowUri(params), this.reuseOrCreateWindow(options)]);
         electronWindow.loadURL(uri.withFragment(DEFAULT_WINDOW_HASH).toString(true));
         return electronWindow;
     }
 
     protected async openWindowWithWorkspace(workspacePath: string): Promise<BrowserWindow> {
         const options = await this.getLastWindowOptions();
-        const [uri, electronWindow] = await Promise.all([this.createWindowUri(), this.createWindow(options)]);
+        const [uri, electronWindow] = await Promise.all([this.createWindowUri(), this.reuseOrCreateWindow(options)]);
         electronWindow.loadURL(uri.withFragment(encodeURI(workspacePath)).toString(true));
         return electronWindow;
+    }
+
+    protected async reuseOrCreateWindow(asyncOptions: MaybePromise<TheiaBrowserWindowOptions>): Promise<BrowserWindow> {
+        if (!this.initialWindow) {
+            return this.createWindow(asyncOptions);
+        }
+        // reset initial window after having it re-used once
+        const window = this.initialWindow;
+        this.initialWindow = undefined;
+        return window;
     }
 
     /** Configures native window creation, i.e. using window.open or links with target "_blank" in the frontend. */
@@ -337,7 +397,7 @@ export class ElectronMainApplication {
         electronWindow.webContents.setWindowOpenHandler(() => {
             const { minWidth, minHeight } = this.getDefaultOptions();
             const options: BrowserWindowConstructorOptions = {
-                ...this.getDefaultTheiaWindowBounds(),
+                ...this.getDefaultTheiaSecondaryWindowBounds(),
                 // We always need the native window frame for now because the secondary window does not have Theia's title bar by default.
                 // In 'custom' title bar mode this would leave the window without any window controls (close, min, max)
                 // TODO set to this.useNativeWindowFrame when secondary windows support a custom title bar.
@@ -364,15 +424,15 @@ export class ElectronMainApplication {
         app.quit();
     }
 
-    protected async handleMainCommand(params: ElectronMainExecutionParams, options: ElectronMainCommandOptions): Promise<void> {
-        if (params.secondInstance === false) {
+    protected async handleMainCommand(options: ElectronMainCommandOptions): Promise<void> {
+        if (options.secondInstance === false) {
             await this.openWindowWithWorkspace(''); // restore previous workspace.
         } else if (options.file === undefined) {
             await this.openDefaultWindow();
         } else {
             let workspacePath: string | undefined;
             try {
-                workspacePath = await fs.realpath(path.resolve(params.cwd, options.file));
+                workspacePath = await fs.realpath(path.resolve(options.cwd, options.file));
             } catch {
                 console.error(`Could not resolve the workspace path. "${options.file}" is not a valid 'file' option. Falling back to the default workspace location.`);
             }
@@ -384,9 +444,13 @@ export class ElectronMainApplication {
         }
     }
 
-    protected async createWindowUri(): Promise<URI> {
+    protected async createWindowUri(params: WindowSearchParams = {}): Promise<URI> {
+        if (!('port' in params)) {
+            params.port = (await this.backendPort).toString();
+        }
+        const query = Object.entries(params).map(([name, value]) => `${name}=${value}`).join('&');
         return FileUri.create(this.globals.THEIA_FRONTEND_HTML_PATH)
-            .withQuery(`port=${await this.backendPort}`);
+            .withQuery(query);
     }
 
     protected getDefaultTheiaWindowOptions(): TheiaBrowserWindowOptions {
@@ -397,6 +461,10 @@ export class ElectronMainApplication {
             ...this.getDefaultTheiaWindowBounds(),
             ...this.getDefaultOptions()
         };
+    }
+
+    protected getDefaultTheiaSecondaryWindowBounds(): TheiaBrowserWindowOptions {
+        return {};
     }
 
     protected getDefaultTheiaWindowBounds(): TheiaBrowserWindowOptions {
@@ -422,7 +490,7 @@ export class ElectronMainApplication {
      */
     protected attachSaveWindowState(electronWindow: BrowserWindow): void {
         const windowStateListeners = new DisposableCollection();
-        let delayedSaveTimeout: NodeJS.Timer | undefined;
+        let delayedSaveTimeout: NodeJS.Timeout | undefined;
         const saveWindowStateDelayed = () => {
             if (delayedSaveTimeout) {
                 clearTimeout(delayedSaveTimeout);
@@ -455,6 +523,7 @@ export class ElectronMainApplication {
                 y: bounds.y,
                 frame: this.useNativeWindowFrame,
                 screenLayout: this.getCurrentScreenLayout(),
+                backgroundColor: this.customBackgroundColor
             };
             this.electronStore.set('windowstate', options);
         } catch (e) {
@@ -506,6 +575,9 @@ export class ElectronMainApplication {
                 });
                 backendProcess.on('error', error => {
                     reject(error);
+                });
+                backendProcess.on('exit', code => {
+                    reject(code);
                 });
                 app.on('quit', () => {
                     // Only issue a kill signal if the backend process is running.
@@ -579,9 +651,8 @@ export class ElectronMainApplication {
         if (wrapper) {
             const listener = wrapper.onDidClose(async () => {
                 listener.dispose();
-                await this.launch({
+                await this.handleMainCommand({
                     secondInstance: false,
-                    argv: this.processArgv.getProcessArgvWithoutBin(process.argv),
                     cwd: process.cwd()
                 });
                 this.restarting = false;

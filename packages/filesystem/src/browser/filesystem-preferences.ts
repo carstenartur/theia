@@ -40,7 +40,7 @@ export const filesystemPreferenceSchema: PreferenceSchema = {
     properties: {
         'files.watcherExclude': {
             // eslint-disable-next-line max-len
-            description: nls.localizeByDefault('Configure paths or glob patterns to exclude from file watching. Paths can either be relative to the watched folder or absolute. Glob patterns are matched relative from the watched folder. When you experience the file watcher process consuming a lot of CPU, make sure to exclude large folders that are of less interest (such as build output folders).'),
+            description: nls.localizeByDefault('Configure paths or [glob patterns](https://aka.ms/vscode-glob-patterns) to exclude from file watching. Paths can either be relative to the watched folder or absolute. Glob patterns are matched relative from the watched folder. When you experience the file watcher process consuming a lot of CPU, make sure to exclude large folders that are of less interest (such as build output folders).'),
             additionalProperties: {
                 type: 'boolean'
             },
@@ -66,7 +66,8 @@ export const filesystemPreferenceSchema: PreferenceSchema = {
         'files.associations': {
             type: 'object',
             markdownDescription: nls.localizeByDefault(
-                'Configure file associations to languages (for example `"*.extension": "html"`). These have precedence over the default associations of the languages installed.'
+                // eslint-disable-next-line max-len
+                'Configure [glob patterns](https://aka.ms/vscode-glob-patterns) of file associations to languages (for example `\"*.extension\": \"html\"`). Patterns will match on the absolute path of a file if they contain a path separator and will match on the name of the file otherwise. These have precedence over the default associations of the languages installed.'
             )
         },
         'files.autoGuessEncoding': {

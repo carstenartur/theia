@@ -20,6 +20,7 @@ import * as fs from '@theia/core/shared/fs-extra';
 import { injectable, inject } from '@theia/core/shared/inversify';
 import URI from '@theia/core/lib/common/uri';
 import { PluginDeployerHandler, PluginDeployerResolver, PluginDeployerResolverContext, PluginDeployOptions, PluginIdentifiers } from '@theia/plugin-ext/lib/common/plugin-protocol';
+import { FileUri } from '@theia/core/lib/node';
 import { VSCodeExtensionUri } from '@theia/plugin-ext-vscode/lib/common/plugin-vscode-uri';
 import { OVSXClientProvider } from '../common/ovsx-client-provider';
 import { OVSXApiFilter, VSXExtensionRaw } from '@theia/ovsx-client';
@@ -41,6 +42,8 @@ export class VSXExtensionResolver implements PluginDeployerResolver {
         return !!VSCodeExtensionUri.toId(new URI(pluginId));
     }
 
+    static readonly TEMP_DIR_PREFIX = 'vscode-download';
+
     async resolve(context: PluginDeployerResolverContext, options?: PluginDeployOptions): Promise<void> {
         const id = VSCodeExtensionUri.toId(new URI(context.getOriginId()));
         if (!id) {
@@ -48,13 +51,14 @@ export class VSXExtensionResolver implements PluginDeployerResolver {
         }
         let extension: VSXExtensionRaw | undefined;
         const client = await this.clientProvider();
-        if (options) {
-            console.log(`[${id}]: trying to resolve version ${options.version}...`);
-            const { extensions } = await client.query({ extensionId: id, extensionVersion: options.version, includeAllVersions: true });
+        const version = options?.version || id.version;
+        if (version) {
+            console.log(`[${id}]: trying to resolve version ${version}...`);
+            const { extensions } = await client.query({ extensionId: id.id, extensionVersion: version, includeAllVersions: true });
             extension = extensions[0];
         } else {
             console.log(`[${id}]: trying to resolve latest version...`);
-            const { extensions } = await client.query({ extensionId: id, includeAllVersions: true });
+            const { extensions } = await client.query({ extensionId: id.id, includeAllVersions: true });
             extension = this.vsxApiFilter.getLatestCompatibleExtension(extensions);
         }
         if (!extension) {
@@ -63,27 +67,35 @@ export class VSXExtensionResolver implements PluginDeployerResolver {
         if (extension.error) {
             throw new Error(extension.error);
         }
-        const resolvedId = id + '-' + extension.version;
+        const resolvedId = id.id + '-' + extension.version;
         const downloadUrl = extension.files.download;
-        console.log(`[${id}]: resolved to '${resolvedId}'`);
+        console.log(`[${id.id}]: resolved to '${resolvedId}'`);
 
         if (!options?.ignoreOtherVersions) {
-            const existingVersion = this.hasSameOrNewerVersion(id, extension);
+            const existingVersion = this.hasSameOrNewerVersion(id.id, extension);
             if (existingVersion) {
                 console.log(`[${id}]: is already installed with the same or newer version '${existingVersion}'`);
                 return;
             }
         }
-        const downloadPath = (await this.environment.getExtensionsDirUri()).path.fsPath();
-        await fs.ensureDir(downloadPath);
-        const extensionPath = path.resolve(downloadPath, path.basename(downloadUrl));
-        console.log(`[${resolvedId}]: trying to download from "${downloadUrl}"...`, 'to path', downloadPath);
-        if (!await this.download(downloadUrl, extensionPath)) {
+        const downloadDir = await this.getTempDir();
+        await fs.ensureDir(downloadDir);
+        const downloadedExtensionPath = path.resolve(downloadDir, path.basename(downloadUrl));
+        console.log(`[${resolvedId}]: trying to download from "${downloadUrl}"...`, 'to path', downloadDir);
+        if (!await this.download(downloadUrl, downloadedExtensionPath)) {
             console.log(`[${resolvedId}]: not found`);
             return;
         }
-        console.log(`[${resolvedId}]: downloaded to ${extensionPath}"`);
-        context.addPlugin(resolvedId, extensionPath);
+        console.log(`[${resolvedId}]: downloaded to ${downloadedExtensionPath}"`);
+        context.addPlugin(resolvedId, downloadedExtensionPath);
+    }
+
+    protected async getTempDir(): Promise<string> {
+        const tempDir = FileUri.fsPath(await this.environment.getTempDirUri(VSXExtensionResolver.TEMP_DIR_PREFIX));
+        if (!await fs.pathExists(tempDir)) {
+            await fs.mkdirs(tempDir);
+        }
+        return tempDir;
     }
 
     protected hasSameOrNewerVersion(id: string, extension: VSXExtensionRaw): string | undefined {

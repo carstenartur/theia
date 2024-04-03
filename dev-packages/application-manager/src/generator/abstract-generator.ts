@@ -14,7 +14,6 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
-import * as os from 'os';
 import * as fs from 'fs-extra';
 import { ApplicationPackage } from '@theia/application-package';
 
@@ -30,39 +29,16 @@ export abstract class AbstractGenerator {
         protected options: GeneratorOptions = {}
     ) { }
 
-    protected compileFrontendModuleImports(modules: Map<string, string>): string {
-        const splitFrontend = this.options.splitFrontend ?? this.options.mode !== 'production';
-        return this.compileModuleImports(modules, splitFrontend ? 'import' : 'require');
-    }
-
-    protected compileBackendModuleImports(modules: Map<string, string>): string {
-        return this.compileModuleImports(modules, 'require');
-    }
-
-    protected compileElectronMainModuleImports(modules?: Map<string, string>): string {
-        return modules && this.compileModuleImports(modules, 'require') || '';
-    }
-
-    protected compileModuleImports(modules: Map<string, string>, fn: 'import' | 'require'): string {
-        if (modules.size === 0) {
-            return '';
-        }
-        const lines = Array.from(modules.keys()).map(moduleName => {
-            const invocation = `${fn}('${modules.get(moduleName)}')`;
-            if (fn === 'require') {
-                return `Promise.resolve(${invocation})`;
-            }
-            return invocation;
-        }).map(statement => `    .then(function () { return ${statement}.then(load) })`);
-        return os.EOL + lines.join(os.EOL);
-    }
-
     protected ifBrowser(value: string, defaultValue: string = ''): string {
         return this.pck.ifBrowser(value, defaultValue);
     }
 
     protected ifElectron(value: string, defaultValue: string = ''): string {
         return this.pck.ifElectron(value, defaultValue);
+    }
+
+    protected ifBrowserOnly(value: string, defaultValue: string = ''): string {
+        return this.pck.ifBrowserOnly(value, defaultValue);
     }
 
     protected async write(path: string, content: string): Promise<void> {
@@ -87,8 +63,7 @@ export abstract class AbstractGenerator {
     }
 
     protected prettyStringify(object: object): string {
-        // eslint-disable-next-line no-null/no-null
-        return JSON.stringify(object, null, 4);
+        return JSON.stringify(object, undefined, 4);
     }
 
 }

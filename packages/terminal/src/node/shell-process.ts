@@ -20,7 +20,7 @@ import { ILogger } from '@theia/core/lib/common/logger';
 import { TerminalProcess, TerminalProcessOptions, ProcessManager, MultiRingBuffer } from '@theia/process/lib/node';
 import { isWindows, isOSX } from '@theia/core/lib/common';
 import URI from '@theia/core/lib/common/uri';
-import { FileUri } from '@theia/core/lib/node/file-uri';
+import { FileUri } from '@theia/core/lib/common/file-uri';
 import { EnvironmentUtils } from '@theia/core/lib/node/environment-utils';
 import { parseArgs } from '@theia/process/lib/node/utils';
 
@@ -39,7 +39,7 @@ export interface ShellProcessOptions {
     isPseudo?: boolean,
 }
 
-function getRootPath(rootURI?: string): string {
+export function getRootPath(rootURI?: string): string {
     if (rootURI) {
         const uri = new URI(rootURI);
         return FileUri.fsPath(uri);

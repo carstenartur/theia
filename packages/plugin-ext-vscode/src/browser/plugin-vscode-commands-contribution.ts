@@ -229,7 +229,10 @@ export class PluginVscodeCommandsContribution implements CommandContribution {
     registerCommands(commands: CommandRegistry): void {
         commands.registerCommand(VscodeCommands.OPEN, {
             isVisible: () => false,
-            execute: async (resource: URI, columnOrOptions?: ViewColumn | TextDocumentShowOptions) => {
+            execute: async (resource: URI | string, columnOrOptions?: ViewColumn | TextDocumentShowOptions) => {
+                if (typeof resource === 'string') {
+                    resource = URI.parse(resource);
+                }
                 try {
                     await this.openWith(VscodeCommands.OPEN.id, resource, columnOrOptions);
                 } catch (error) {
@@ -353,7 +356,7 @@ export class PluginVscodeCommandsContribution implements CommandContribution {
         commands.registerCommand({ id: VscodeCommands.INSTALL_FROM_VSIX.id }, {
             execute: async (vsixUriOrExtensionId: TheiaURI | UriComponents | string) => {
                 if (typeof vsixUriOrExtensionId === 'string') {
-                    await this.pluginServer.deploy(VSCodeExtensionUri.toVsxExtensionUriString(vsixUriOrExtensionId));
+                    await this.pluginServer.deploy(VSCodeExtensionUri.fromId(vsixUriOrExtensionId).toString());
                 } else {
                     const uriPath = isUriComponents(vsixUriOrExtensionId) ? URI.revive(vsixUriOrExtensionId).fsPath : await this.fileService.fsPath(vsixUriOrExtensionId);
                     await this.pluginServer.deploy(`local-file:${uriPath}`);

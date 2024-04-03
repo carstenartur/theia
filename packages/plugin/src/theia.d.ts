@@ -3,7 +3,7 @@
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License v. 2.0 which is available at
-// http://www.eclipse.org/legal/epl-2.0.
+// http://www.eclipse.org/legal/epl-2.0.g
 //
 // This Source Code may also be made available under the following Secondary
 // Licenses when the conditions for such availability set forth in the Eclipse
@@ -22,17 +22,24 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './theia-extra';
+import './theia.proposed.canonicalUriProvider';
 import './theia.proposed.customEditorMove';
 import './theia.proposed.diffCommand';
 import './theia.proposed.documentPaste';
+import './theia.proposed.dropMetadata';
 import './theia.proposed.editSessionIdentityProvider';
 import './theia.proposed.extensionsAny';
 import './theia.proposed.externalUriOpener';
+import './theia.proposed.notebookCellExecutionState';
+import './theia.proposed.notebookKernelSource';
+import './theia.proposed.notebookMessaging';
 import './theia.proposed.findTextInFiles';
 import './theia.proposed.fsChunks';
+import './theia.proposed.multiDocumentHighlightProvider';
 import './theia.proposed.profileContentHandlers';
 import './theia.proposed.resolvers';
 import './theia.proposed.scmValidation';
+import './theia.proposed.shareProvider';
 import './theia.proposed.terminalQuickFixProvider';
 import './theia.proposed.textSearchProvider';
 import './theia.proposed.timeline';
@@ -675,8 +682,12 @@ export module '@theia/plugin' {
         /**
          * Indicates that this markdown string is from a trusted source. Only *trusted*
          * markdown supports links that execute commands, e.g. `[Run it](command:myCommandId)`.
+         *
+         * Defaults to `false` (commands are disabled).
+         *
+         * If this is an object, only the set of commands listed in `enabledCommands` are allowed.
          */
-        isTrusted?: boolean;
+        isTrusted?: boolean | { readonly enabledCommands: readonly string[] };
 
         /**
          * Indicates that this markdown string can contain {@link ThemeIcon ThemeIcons}, e.g. `$(zap)`.
@@ -1886,7 +1897,11 @@ export module '@theia/plugin' {
         /**
          * Render the line numbers with values relative to the primary cursor location.
          */
-        Relative = 2
+        Relative = 2,
+        /**
+         * Render the line numbers on every 10th line number.
+         */
+        Interval = 3
     }
 
     /**
@@ -1902,6 +1917,14 @@ export module '@theia/plugin' {
          * When setting a text editor's options, this property is optional and it can be a number or `"auto"`.
          */
         tabSize?: number | string;
+
+        /**
+         * The number of spaces to insert when {@link TextEditorOptions.insertSpaces insertSpaces} is true.
+         *
+         * When getting a text editor's options, this property will always be a number (resolved).
+         * When setting a text editor's options, this property is optional and it can be a number or `"tabSize"`.
+         */
+        indentSize?: number | string;
 
         /**
          * When pressing Tab insert {@link TextEditorOptions.tabSize n} spaces.
@@ -2133,6 +2156,11 @@ export module '@theia/plugin' {
          * and all fields other than {@link QuickPickItem.label label} will be ignored.
          */
         kind?: QuickPickItemKind;
+
+        /**
+         * The icon path or {@link ThemeIcon} for the QuickPickItem.
+         */
+        iconPath?: Uri | { light: Uri; dark: Uri } | ThemeIcon;
 
         /**
          * A human-readable string which is rendered less prominent in the same line. Supports rendering of
@@ -3023,10 +3051,11 @@ export module '@theia/plugin' {
 
         /**
          * Send text to the terminal.
-         * @param text - text content.
-         * @param addNewLine - in case true - apply new line after the text, otherwise don't apply new line. This defaults to `true`.
+         * @param text - The text to send.
+         * @param shouldExecute - Indicates that the text being sent should be executed rather than just inserted in the terminal.
+         * The character added is \r, independent from the platform (compared to platform specific in vscode). This defaults to `true`.
          */
-        sendText(text: string, addNewLine?: boolean): void;
+        sendText(text: string, shouldExecute?: boolean): void;
 
         /**
          * Show created terminal on the UI.
@@ -3564,6 +3593,24 @@ export module '@theia/plugin' {
     }
 
     /**
+     * Options applied to the mutator.
+     */
+    export interface EnvironmentVariableMutatorOptions {
+        /**
+         * Apply to the environment just before the process is created. Defaults to true
+         */
+        applyAtProcessCreation?: boolean;
+
+        /**
+         * Apply to the environment in the shell integration script. Note that this _will not_ apply
+         * the mutator if shell integration is disabled or not working for some reason. Defaults to
+         * false.
+         * @stubbed
+         */
+        applyAtShellIntegration?: boolean;
+    }
+
+    /**
      * A type of mutation and its value to be applied to an environment variable.
      */
     export interface EnvironmentVariableMutator {
@@ -3576,12 +3623,23 @@ export module '@theia/plugin' {
          * The value to use for the variable.
          */
         readonly value: string;
+
+        /**
+         * Options applied to the mutator.
+         */
+        readonly options: EnvironmentVariableMutatorOptions;
     }
 
     /**
      * A collection of mutations that an extension can apply to a process environment.
      */
     export interface EnvironmentVariableCollection {
+
+        /**
+         * A description for the environment variable collection, this will be used to describe the changes in the UI.
+         */
+        description: string | MarkdownString | undefined;
+
         /**
          * Whether the collection should be cached for the workspace and applied to the terminal
          * across window reloads. When true the collection will be active immediately such when the
@@ -3600,7 +3658,7 @@ export module '@theia/plugin' {
          * @param variable The variable to replace.
          * @param value The value to replace the variable with.
          */
-        replace(variable: string, value: string): void;
+        replace(variable: string, value: string, options?: EnvironmentVariableMutatorOptions): void;
 
         /**
          * Append a value to an environment variable.
@@ -3611,7 +3669,7 @@ export module '@theia/plugin' {
          * @param variable The variable to append to.
          * @param value The value to append to the variable.
          */
-        append(variable: string, value: string): void;
+        append(variable: string, value: string, options?: EnvironmentVariableMutatorOptions): void;
 
         /**
          * Prepend a value to an environment variable.
@@ -3622,7 +3680,7 @@ export module '@theia/plugin' {
          * @param variable The variable to prepend.
          * @param value The value to prepend to the variable.
          */
-        prepend(variable: string, value: string): void;
+        prepend(variable: string, value: string, options?: EnvironmentVariableMutatorOptions): void;
 
         /**
          * Gets the mutator that this collection applies to a variable, if any.
@@ -3650,6 +3708,39 @@ export module '@theia/plugin' {
          * Clears all mutators from this collection.
          */
         clear(): void;
+    }
+
+    /**
+     * A collection of mutations that an extension can apply to a process environment. Applies to all scopes.
+     */
+    export interface GlobalEnvironmentVariableCollection extends EnvironmentVariableCollection {
+        /**
+         * Gets scope-specific environment variable collection for the extension. This enables alterations to
+         * terminal environment variables solely within the designated scope, and is applied in addition to (and
+         * after) the global collection.
+         *
+         * Each object obtained through this method is isolated and does not impact objects for other scopes,
+         * including the global collection.
+         *
+         * @param scope The scope to which the environment variable collection applies to.
+         *
+         * If a scope parameter is omitted, collection applicable to all relevant scopes for that parameter is
+         * returned. For instance, if the 'workspaceFolder' parameter is not specified, the collection that applies
+         * across all workspace folders will be returned.
+         *
+         * @return Environment variable collection for the passed in scope.
+         */
+        getScoped(scope: EnvironmentVariableScope): EnvironmentVariableCollection;
+    }
+
+    /**
+     * The scope object to which the environment variable collection applies.
+     */
+    export interface EnvironmentVariableScope {
+        /**
+         * Any specific workspace folder to get collection for.
+         */
+        workspaceFolder?: WorkspaceFolder;
     }
 
     /**
@@ -3839,7 +3930,7 @@ export module '@theia/plugin' {
          * Gets the extension's environment variable collection for this workspace, enabling changes
          * to be applied to terminal environment variables.
          */
-        readonly environmentVariableCollection: EnvironmentVariableCollection;
+        readonly environmentVariableCollection: GlobalEnvironmentVariableCollection;
 
         /**
          * Get the absolute path of a resource contained in the extension.
@@ -4938,14 +5029,12 @@ export module '@theia/plugin' {
 
         /**
          * The currently visible {@link NotebookEditor notebook editors} or an empty array.
-         * @stubbed
          */
         export const visibleNotebookEditors: readonly NotebookEditor[];
 
         /**
          * An {@link Event} which fires when the {@link window.visibleNotebookEditors visible notebook editors}
          * has changed.
-         * @stubbed
          */
         export const onDidChangeVisibleNotebookEditors: Event<readonly NotebookEditor[]>;
 
@@ -4953,7 +5042,6 @@ export module '@theia/plugin' {
          * The currently active {@link NotebookEditor notebook editor} or `undefined`. The active editor is the one
          * that currently has focus or, when none has focus, the one that has changed
          * input most recently.
-         * @stubbed
          */
         export const activeNotebookEditor: NotebookEditor | undefined;
 
@@ -4961,21 +5049,18 @@ export module '@theia/plugin' {
          * An {@link Event} which fires when the {@link window.activeNotebookEditor active notebook editor}
          * has changed. *Note* that the event also fires when the active editor changes
          * to `undefined`.
-         * @stubbed
          */
         export const onDidChangeActiveNotebookEditor: Event<NotebookEditor | undefined>;
 
         /**
          * An {@link Event} which fires when the {@link NotebookEditor.selections notebook editor selections}
          * have changed.
-         * @stubbed
          */
         export const onDidChangeNotebookEditorSelection: Event<NotebookEditorSelectionChangeEvent>;
 
         /**
          * An {@link Event} which fires when the {@link NotebookEditor.visibleRanges notebook editor visible ranges}
          * have changed.
-         * @stubbed
          */
         export const onDidChangeNotebookEditorVisibleRanges: Event<NotebookEditorVisibleRangesChangeEvent>;
 
@@ -4986,7 +5071,6 @@ export module '@theia/plugin' {
          * @param options {@link NotebookDocumentShowOptions Editor options} to configure the behavior of showing the {@link NotebookEditor notebook editor}.
          *
          * @return A promise that resolves to an {@link NotebookEditor notebook editor}.
-         * @stubbed
          */
         export function showNotebookDocument(document: NotebookDocument, options?: NotebookDocumentShowOptions): Thenable<NotebookEditor>;
 
@@ -5941,6 +6025,44 @@ export module '@theia/plugin' {
          * array containing all selected tree items.
          */
         canSelectMany?: boolean;
+
+        /**
+         * By default, when the children of a tree item have already been fetched, child checkboxes are automatically managed based on the checked state of the parent tree item.
+         * If the tree item is collapsed by default (meaning that the children haven't yet been fetched) then child checkboxes will not be updated.
+         * To override this behavior and manage child and parent checkbox state in the extension, set this to `true`.
+         *
+         * Examples where {@link TreeViewOptions.manageCheckboxStateManually} is false, the default behavior:
+         *
+         * 1. A tree item is checked, then its children are fetched. The children will be checked.
+         *
+         * 2. A tree item's parent is checked. The tree item and all of it's siblings will be checked.
+         *   - [ ] Parent
+         *     - [ ] Child 1
+         *     - [ ] Child 2
+         *   When the user checks Parent, the tree will look like this:
+         *   - [x] Parent
+         *     - [x] Child 1
+         *     - [x] Child 2
+         *
+         * 3. A tree item and all of it's siblings are checked. The parent will be checked.
+         *   - [ ] Parent
+         *     - [ ] Child 1
+         *     - [ ] Child 2
+         *   When the user checks Child 1 and Child 2, the tree will look like this:
+         *   - [x] Parent
+         *     - [x] Child 1
+         *     - [x] Child 2
+         *
+         * 4. A tree item is unchecked. The parent will be unchecked.
+         *   - [x] Parent
+         *     - [x] Child 1
+         *     - [x] Child 2
+         *   When the user unchecks Child 1, the tree will look like this:
+         *   - [ ] Parent
+         *     - [ ] Child 1
+         *     - [x] Child 2
+         */
+        manageCheckboxStateManually?: boolean;
     }
 
     /**
@@ -6155,6 +6277,16 @@ export module '@theia/plugin' {
     }
 
     /**
+     * An event describing the change in a tree item's checkbox state.
+     */
+    export interface TreeCheckboxChangeEvent<T> {
+        /**
+         * The items that were checked or unchecked.
+         */
+        readonly items: ReadonlyArray<[T, TreeItemCheckboxState]>;
+    }
+
+    /**
      * Represents a Tree view
      */
     export interface TreeView<T> extends Disposable {
@@ -6188,6 +6320,11 @@ export module '@theia/plugin' {
          * Event that is fired when {@link TreeView.visible visibility} has changed
          */
         readonly onDidChangeVisibility: Event<TreeViewVisibilityChangeEvent>;
+
+        /**
+         * An event to signal that an element or root has either been checked or unchecked.
+         */
+        readonly onDidChangeCheckboxState: Event<TreeCheckboxChangeEvent<T>>;
 
         /**
          * An optional human-readable message that will be rendered in the view.
@@ -6362,6 +6499,12 @@ export module '@theia/plugin' {
         accessibilityInformation?: AccessibilityInformation;
 
         /**
+         * {@link TreeItemCheckboxState TreeItemCheckboxState} of the tree item.
+         * {@link TreeDataProvider.onDidChangeTreeData onDidChangeTreeData} should be fired when {@link TreeItem.checkboxState checkboxState} changes.
+         */
+        checkboxState?: TreeItemCheckboxState | { readonly state: TreeItemCheckboxState; readonly tooltip?: string; readonly accessibilityInformation?: AccessibilityInformation };
+
+        /**
          * @param label A human-readable string describing this item
          * @param collapsibleState {@link TreeItemCollapsibleState TreeItemCollapsibleState} of the tree item. Default is [TreeItemCollapsibleState.None](#TreeItemCollapsibleState.None)
          */
@@ -6407,6 +6550,20 @@ export module '@theia/plugin' {
          * first is the inclusive start index and the second the exclusive end index
          */
         highlights?: [number, number][];
+    }
+
+    /**
+     * Checkbox state of the tree item
+     */
+    export enum TreeItemCheckboxState {
+        /**
+         * Determines an item is unchecked
+         */
+        Unchecked = 0,
+        /**
+         * Determines an item is checked
+         */
+        Checked = 1
     }
 
     /**
@@ -7076,7 +7233,6 @@ export module '@theia/plugin' {
          * All notebook documents currently known to the editor.
          *
          * @readonly
-         * @stubbed
          */
         export let notebookDocuments: readonly NotebookDocument[];
 
@@ -7093,7 +7249,6 @@ export module '@theia/plugin' {
 
         /**
          * An event that is emitted when a {@link NotebookDocument notebook} is opened.
-         * @stubbed
          */
         export const onDidOpenNotebookDocument: Event<NotebookDocument>;
 
@@ -7103,13 +7258,11 @@ export module '@theia/plugin' {
          * Note 1: There is no guarantee that this event fires when an editor tab is closed.
          *
          * Note 2: A notebook can be open but not shown in an editor which means this event can fire for a notebook that has not been shown in an editor.
-         * @stubbed
          */
         export const onDidCloseNotebookDocument: Event<NotebookDocument>;
 
         /**
          * An event that is emitted when a {@link NotebookDocument notebook} is saved.
-         * @stubbed
          */
         export const onDidSaveNotebookDocument: Event<NotebookDocument>;
 
@@ -7121,7 +7274,6 @@ export module '@theia/plugin' {
          * @param serializer a notebook serializer.
          * @param options Optional context options that define what parts of a notebook should be persisted
          * @return A {@link Disposable disposable} that unregisters this serializer when being disposed.
-         * @stubbed
          */
         export function registerNotebookSerializer(notebookType: string, serializer: NotebookSerializer, options?: NotebookDocumentContentOptions): Disposable;
 
@@ -7175,7 +7327,6 @@ export module '@theia/plugin' {
 
         /**
          * An event that is emitted when a {@link Notebook notebook} has changed.
-         * @stubbed
          */
         export const onDidChangeNotebookDocument: Event<NotebookDocumentChangeEvent>;
 
@@ -7314,7 +7465,6 @@ export module '@theia/plugin' {
          *
          * @param uri The resource to open.
          * @return A promise that resolves to a {@link NotebookDocument notebook}.
-         * @stubbed
          */
         export function openNotebookDocument(uri: Uri): Thenable<NotebookDocument> | undefined;
 
@@ -7324,7 +7474,6 @@ export module '@theia/plugin' {
          * @param notebookType The notebook type that should be used.
          * @param content The initial contents of the notebook.
          * @return A promise that resolves to a {@link NotebookDocument notebook}.
-         * @stubbed
          */
         export function openNotebookDocument(notebookType: string, content?: NotebookData): Thenable<NotebookDocument> | undefined;
 
@@ -7388,6 +7537,29 @@ export module '@theia/plugin' {
         export function findFiles(include: GlobPattern, exclude?: GlobPattern | null, maxResults?: number, token?: CancellationToken): Thenable<Uri[]>;
 
         /**
+         * Saves the editor identified by the given resource and returns the resulting resource or `undefined`
+         * if save was not successful or no editor with the given resource was found.
+         *
+         * **Note** that an editor with the provided resource must be opened in order to be saved.
+         *
+         * @param uri the associated uri for the opened editor to save.
+         * @returns A thenable that resolves when the save operation has finished.
+         */
+        export function save(uri: Uri): Thenable<Uri | undefined>;
+
+        /**
+         * Saves the editor identified by the given resource to a new file name as provided by the user and
+         * returns the resulting resource or `undefined` if save was not successful or cancelled or no editor
+         * with the given resource was found.
+         *
+         * **Note** that an editor with the provided resource must be opened in order to be saved as.
+         *
+         * @param uri the associated uri for the opened editor to save as.
+         * @returns A thenable that resolves when the save-as operation has finished.
+         */
+        export function saveAs(uri: Uri): Thenable<Uri | undefined>;
+
+        /**
          * Save all dirty files.
          *
          * @param includeUntitled Also save files that have been created during this session.
@@ -7425,7 +7597,7 @@ export module '@theia/plugin' {
          * @param options Immutable metadata about the provider.
          * @return A {@link Disposable disposable} that unregisters this provider when being disposed.
          */
-        export function registerFileSystemProvider(scheme: string, provider: FileSystemProvider, options?: { readonly isCaseSensitive?: boolean, readonly isReadonly?: boolean }): Disposable;
+        export function registerFileSystemProvider(scheme: string, provider: FileSystemProvider, options?: { readonly isCaseSensitive?: boolean, readonly isReadonly?: boolean | MarkdownString }): Disposable;
 
         /**
          * Returns the {@link WorkspaceFolder workspace folder} that contains a given uri.
@@ -7590,6 +7762,12 @@ export module '@theia/plugin' {
         export const isTelemetryEnabled: boolean;
 
         /**
+         * An {@link Event} which fires when the default shell changes. This fires with the new
+         * shell path.
+         */
+        export const onDidChangeShell: Event<string>;
+
+        /**
          * An {@link Event} which fires when the user enabled or disables telemetry.
          * `true` if the user has enabled telemetry or `false` if the user has disabled telemetry.
          */
@@ -7616,7 +7794,9 @@ export module '@theia/plugin' {
         export const remoteName: string | undefined;
 
         /**
-         * The detected default shell for the extension host.
+         * The detected default shell for the extension host, this is overridden by the
+         * `terminal.integrated.defaultProfile` setting for the extension host's platform. Note that in
+         * environments that do not support a shell the value is the empty string.
          */
         export const shell: string;
 
@@ -7907,6 +8087,43 @@ export module '@theia/plugin' {
         unIndentedLinePattern?: RegExp;
     }
 
+    export enum SyntaxTokenType {
+        /**
+         * Everything except tokens that are part of comments, string literals and regular expressions.
+         */
+        Other = 0,
+        /**
+         * A comment.
+         */
+        Comment = 1,
+        /**
+         * A string literal.
+         */
+        String = 2,
+        /**
+         * A regular expression.
+         */
+        RegEx = 3
+    }
+
+    /**
+     * Describes pairs of strings where the close string will be automatically inserted when typing the opening string.
+     */
+    export interface AutoClosingPair {
+        /**
+         * The string that will trigger the automatic insertion of the closing string.
+         */
+        open: string;
+        /**
+         * The closing string that will be automatically inserted when typing the opening string.
+         */
+        close: string;
+        /**
+         * A set of tokens where the pair should not be auto closed.
+         */
+        notIn?: SyntaxTokenType[];
+    }
+
     /**
      * The language configuration interfaces defines the contract between extensions
      * and various editor features, like automatic bracket insertion, automatic indentation etc.
@@ -7946,6 +8163,10 @@ export module '@theia/plugin' {
          */
         onEnterRules?: OnEnterRule[];
 
+        /**
+         * The language's auto closing pairs.
+         */
+        autoClosingPairs?: AutoClosingPair[];
     }
 
     /**
@@ -9870,6 +10091,24 @@ export module '@theia/plugin' {
          */
         static readonly SourceFixAll: CodeActionKind;
 
+        /**
+         * Base kind for all code actions applying to the entire notebook's scope. CodeActionKinds using
+         * this should always begin with `notebook.`
+         *
+         * This requires that new CodeActions be created for it and contributed via extensions.
+         * Pre-existing kinds can not just have the new `notebook.` prefix added to them, as the functionality
+         * is unique to the full-notebook scope.
+         *
+         * Notebook CodeActionKinds can be initialized as either of the following (both resulting in `notebook.source.xyz`):
+         * - `const newKind =  CodeActionKind.Notebook.append(CodeActionKind.Source.append('xyz').value)`
+         * - `const newKind =  CodeActionKind.Notebook.append('source.xyz')`
+         *
+         * Example Kinds/Actions:
+         * - `notebook.source.organizeImports` (might move all imports to a new top cell)
+         * - `notebook.source.normalizeVariableNames` (might rename all variables to a standardized casing format)
+         */
+        static readonly Notebook: CodeActionKind;
+
         private constructor(value: string);
 
         /**
@@ -10046,7 +10285,23 @@ export module '@theia/plugin' {
          * @param uri A resource identifier.
          * @param edits An array of edits.
          */
-        set(uri: Uri, edits: ReadonlyArray<[TextEdit | SnippetTextEdit, WorkspaceEditEntryMetadata]>): void;
+        set(uri: Uri, edits: ReadonlyArray<[TextEdit | SnippetTextEdit, WorkspaceEditEntryMetadata | undefined]>): void;
+
+        /**
+         * Set (and replace) notebook edits for a resource.
+         *
+         * @param uri A resource identifier.
+         * @param edits An array of edits.
+         */
+        set(uri: Uri, edits: readonly NotebookEdit[]): void;
+
+        /**
+         * Set (and replace) notebook edits with metadata for a resource.
+         *
+         * @param uri A resource identifier.
+         * @param edits An array of edits.
+         */
+        set(uri: Uri, edits: ReadonlyArray<[NotebookEdit, WorkspaceEditEntryMetadata | undefined]>): void;
 
         /**
          * Get the text edits for a resource.
@@ -10141,6 +10396,26 @@ export module '@theia/plugin' {
             options: FormattingOptions,
             token: CancellationToken | undefined
         ): ProviderResult<TextEdit[] | undefined>;
+
+        /**
+         * Provide formatting edits for multiple ranges in a document.
+         *
+         * This function is optional but allows a formatter to perform faster when formatting only modified ranges or when
+         * formatting a large number of selections.
+         *
+         * The given ranges are hints and providers can decide to format a smaller
+         * or larger range. Often this is done by adjusting the start and end
+         * of the range to full syntax nodes.
+         *
+         * @param document The document in which the command was invoked.
+         * @param ranges The ranges which should be formatted.
+         * @param options Options controlling formatting.
+         * @param token A cancellation token.
+         * @returns A set of text edits or a thenable that resolves to such. The lack of a result can be
+         * signaled by returning `undefined`, `null`, or an empty array.
+         * @stubbed @monaco-uplift the current monaco version does not yet use this API
+         */
+        provideDocumentRangesFormattingEdits?(document: TextDocument, ranges: Range[], options: FormattingOptions, token: CancellationToken): ProviderResult<TextEdit[]>;
     }
 
     /**
@@ -12627,6 +12902,9 @@ export module '@theia/plugin' {
 
         /** Controls whether the terminal is cleared before executing the task. */
         clear?: boolean;
+
+        /** Controls whether the terminal is closed after executing the task. */
+        close?: boolean;
     }
 
     /**
@@ -13666,6 +13944,17 @@ export module '@theia/plugin' {
     }
 
     /**
+     * Optional options to be used when calling {@link authentication.getSession} with the flag `forceNewSession`.
+     */
+    export interface AuthenticationForceNewSessionOptions {
+        /**
+         * An optional message that will be displayed to the user when we ask to re-authenticate. Providing additional context
+         * as to why you are asking a user to re-authenticate can help increase the odds that they will accept.
+         */
+        detail?: string;
+    }
+
+    /**
      * Options to be used when getting an {@link AuthenticationSession AuthenticationSession} from an {@link AuthenticationProvider AuthenticationProvider}.
      */
     export interface AuthenticationGetSessionOptions {
@@ -13699,7 +13988,7 @@ export module '@theia/plugin' {
          *
          * Defaults to false.
          */
-        forceNewSession?: boolean | { detail: string };
+        forceNewSession?: boolean | AuthenticationForceNewSessionOptions;
 
         /**
          * Whether we should show the indication to sign in in the Accounts menu.
@@ -14421,13 +14710,11 @@ export module '@theia/plugin' {
 
         /**
          * The {@link NotebookDocument notebook document} associated with this notebook editor.
-         * @stubbed
          */
         readonly notebook: NotebookDocument;
 
         /**
          * The primary selection in this notebook editor.
-         * @stubbed
          */
         selection: NotebookRange;
 
@@ -14435,19 +14722,16 @@ export module '@theia/plugin' {
          * All selections in this notebook editor.
          *
          * The primary selection (or focused range) is `selections[0]`. When the document has no cells, the primary selection is empty `{ start: 0, end: 0 }`;
-         * @stubbed
          */
         selections: readonly NotebookRange[];
 
         /**
          * The current visible ranges in the editor (vertically).
-         * @stubbed
          */
         readonly visibleRanges: readonly NotebookRange[];
 
         /**
          * The column in which this editor shows.
-         * @stubbed
          */
         readonly viewColumn?: ViewColumn;
 
@@ -14467,7 +14751,6 @@ export module '@theia/plugin' {
     export interface NotebookRendererMessaging {
         /**
          * An event that fires when a message is received from a renderer.
-         * @stubbed
          */
         readonly onDidReceiveMessage: Event<{
             readonly editor: NotebookEditor;
@@ -14482,7 +14765,6 @@ export module '@theia/plugin' {
          * message is sent to all renderers.
          * @returns a boolean indicating whether the message was successfully
          * delivered to any renderer.
-         * @stubbed
          */
         postMessage(message: any, editor?: NotebookEditor): Thenable<boolean>;
     }
@@ -14516,7 +14798,6 @@ export module '@theia/plugin' {
          * The index of this cell in its {@link NotebookDocument.cellAt containing notebook}. The
          * index is updated when a cell is moved within its notebook. The index is `-1`
          * when the cell has been removed from its notebook.
-         * @stubbed
          */
         readonly index: number;
 
@@ -14527,31 +14808,26 @@ export module '@theia/plugin' {
 
         /**
          * The kind of this cell.
-         * @stubbed
          */
         readonly kind: NotebookCellKind;
 
         /**
          * The {@link TextDocument text} of this cell, represented as text document.
-         * @stubbed
          */
         readonly document: TextDocument;
 
         /**
          * The metadata of this cell. Can be anything but must be JSON-stringifyable.
-         * @stubbed
          */
         readonly metadata: { readonly [key: string]: any };
 
         /**
          * The outputs of this cell.
-         * @stubbed
          */
         readonly outputs: readonly NotebookCellOutput[];
 
         /**
          * The most recent {@link NotebookCellExecutionSummary execution summary} for this cell.
-         * @stubbed
          */
         readonly executionSummary: NotebookCellExecutionSummary | undefined;
     }
@@ -14567,7 +14843,6 @@ export module '@theia/plugin' {
          *
          * *Note* that most notebooks use the `file`-scheme, which means they are files on disk. However, **not** all notebooks are
          * saved on disk and therefore the `scheme` must be checked before trying to access the underlying file or siblings on disk.
-         * @stubbed
          *
          * @see {@link FileSystemProvider}
          */
@@ -14575,7 +14850,6 @@ export module '@theia/plugin' {
 
         /**
          * The type of notebook.
-         * @stubbed
          */
         readonly notebookType: string;
 
@@ -14603,13 +14877,11 @@ export module '@theia/plugin' {
 
         /**
          * Arbitrary metadata for this notebook. Can be anything but must be JSON-stringifyable.
-         * @stubbed
          */
         readonly metadata: { [key: string]: any };
 
         /**
          * The number of cells in the notebook.
-         * @stubbed
          */
         readonly cellCount: number;
 
@@ -14618,7 +14890,6 @@ export module '@theia/plugin' {
          *
          * @param index - The index of the cell to retrieve.
          * @return A {@link NotebookCell cell}.
-         * @stubbed
          */
         cellAt(index: number): NotebookCell;
 
@@ -14628,7 +14899,6 @@ export module '@theia/plugin' {
          *
          * @param range A notebook range.
          * @returns The cells contained by the range or all cells.
-         * @stubbed
          */
         getCells(range?: NotebookRange): NotebookCell[];
 
@@ -14637,7 +14907,6 @@ export module '@theia/plugin' {
          *
          * @return A promise that will resolve to true when the document
          * has been saved. Will return false if the file was not dirty or when save failed.
-         * @stubbed
          */
         save(): Thenable<boolean>;
     }
@@ -14651,7 +14920,6 @@ export module '@theia/plugin' {
 
         /**
          * The affected cell.
-         * @stubbed
          */
         readonly cell: NotebookCell;
 
@@ -14660,25 +14928,21 @@ export module '@theia/plugin' {
          *
          * *Note* that you should use the {@link workspace.onDidChangeTextDocument onDidChangeTextDocument}-event
          * for detailed change information, like what edits have been performed.
-         * @stubbed
          */
         readonly document: TextDocument | undefined;
 
         /**
          * The new metadata of the cell or `undefined` when it did not change.
-         * @stubbed
          */
         readonly metadata: { [key: string]: any } | undefined;
 
         /**
          * The new outputs of the cell or `undefined` when they did not change.
-         * @stubbed
          */
         readonly outputs: readonly NotebookCellOutput[] | undefined;
 
         /**
          * The new execution summary of the cell or `undefined` when it did not change.
-         * @stubbed
          */
         readonly executionSummary: NotebookCellExecutionSummary | undefined;
     }
@@ -14695,19 +14959,16 @@ export module '@theia/plugin' {
          *
          * Note that no cells have been {@link NotebookDocumentContentChange.removedCells removed}
          * when this range is {@link NotebookRange.isEmpty empty}.
-         * @stubbed
          */
         readonly range: NotebookRange;
 
         /**
          * Cells that have been added to the document.
-         * @stubbed
          */
         readonly addedCells: readonly NotebookCell[];
 
         /**
          * Cells that have been removed from the document.
-         * @stubbed
          */
         readonly removedCells: readonly NotebookCell[];
     }
@@ -14719,25 +14980,21 @@ export module '@theia/plugin' {
 
         /**
          * The affected notebook.
-         * @stubbed
          */
         readonly notebook: NotebookDocument;
 
         /**
          * The new metadata of the notebook or `undefined` when it did not change.
-         * @stubbed
          */
         readonly metadata: { [key: string]: any } | undefined;
 
         /**
          * An array of content changes describing added or removed {@link NotebookCell cells}.
-         * @stubbed
          */
         readonly contentChanges: readonly NotebookDocumentContentChange[];
 
         /**
          * An array of {@link NotebookDocumentCellChange cell changes}.
-         * @stubbed
          */
         readonly cellChanges: readonly NotebookDocumentCellChange[];
     }
@@ -14752,7 +15009,6 @@ export module '@theia/plugin' {
     export interface NotebookDocumentWillSaveEvent {
         /**
          * A cancellation token.
-         * @stubbed
          */
         readonly token: CancellationToken;
 
@@ -14809,19 +15065,16 @@ export module '@theia/plugin' {
 
         /**
          * The order in which the execution happened.
-         * @stubbed
          */
         readonly executionOrder?: number;
 
         /**
          * If the execution finished successfully.
-         * @stubbed
          */
         readonly success?: boolean;
 
         /**
          * The times at which execution started and ended, as unix timestamps
-         * @stubbed
          */
         readonly timing?: { readonly startTime: number; readonly endTime: number };
     }
@@ -14834,19 +15087,16 @@ export module '@theia/plugin' {
 
         /**
          * The zero-based start index of this range.
-         * @stubbed
          */
         readonly start: number;
 
         /**
          * The exclusive end index of this range (zero-based).
-         * @stubbed
          */
         readonly end: number;
 
         /**
          * `true` if `start` and `end` are equal.
-         * @stubbed
          */
         readonly isEmpty: boolean;
 
@@ -14856,7 +15106,6 @@ export module '@theia/plugin' {
          *
          * @param start start index
          * @param end end index.
-         * @stubbed
          */
         constructor(start: number, end: number);
 
@@ -14866,7 +15115,6 @@ export module '@theia/plugin' {
          * @param change An object that describes a change to this range.
          * @return A range that reflects the given change. Will return `this` range if the change
          * is not changing anything.
-         * @stubbed
          */
         with(change: { start?: number; end?: number }): NotebookRange;
     }
@@ -14970,13 +15218,11 @@ export module '@theia/plugin' {
          *  vscode.NotebookCellOutputItem.text('Hey', 'text/plain'), // INVALID: repeated type, editor will pick just one
          * ])
          * ```
-         * @stubbed
          */
         items: NotebookCellOutputItem[];
 
         /**
          * Arbitrary metadata for this cell output. Can be anything but must be JSON-stringifyable.
-         * @stubbed
          */
         metadata?: { [key: string]: any };
 
@@ -14985,7 +15231,6 @@ export module '@theia/plugin' {
          *
          * @param items Notebook output items.
          * @param metadata Optional metadata.
-         * @stubbed
          */
         constructor(items: NotebookCellOutputItem[], metadata?: { [key: string]: any });
     }
@@ -14997,26 +15242,22 @@ export module '@theia/plugin' {
 
         /**
          * The {@link NotebookCellKind kind} of this cell data.
-         * @stubbed
          */
         kind: NotebookCellKind;
 
         /**
          * The source value of this cell data - either source code or formatted text.
-         * @stubbed
          */
         value: string;
 
         /**
          * The language identifier of the source value of this cell data. Any value from
          * {@linkcode languages.getLanguages getLanguages} is possible.
-         * @stubbed
          */
         languageId: string;
 
         /**
          * The outputs of this cell data.
-         * @stubbed
          */
         outputs?: NotebookCellOutput[];
 
@@ -15027,7 +15268,6 @@ export module '@theia/plugin' {
 
         /**
          * The execution summary of this cell data.
-         * @stubbed
          */
         executionSummary?: NotebookCellExecutionSummary;
 
@@ -15038,7 +15278,6 @@ export module '@theia/plugin' {
          * @param kind The kind.
          * @param value The source value.
          * @param languageId The language identifier of the source value.
-         * @stubbed
          */
         constructor(kind: NotebookCellKind, value: string, languageId: string);
     }
@@ -15054,13 +15293,11 @@ export module '@theia/plugin' {
     export class NotebookData {
         /**
          * The cell data of this notebook data.
-         * @stubbed
          */
         cells: NotebookCellData[];
 
         /**
          * Arbitrary metadata of notebook data.
-         * @stubbed
          */
         metadata?: { [key: string]: any };
 
@@ -15068,7 +15305,6 @@ export module '@theia/plugin' {
          * Create new notebook data.
          *
          * @param cells An array of cell data.
-         * @stubbed
          */
         constructor(cells: NotebookCellData[]);
     }
@@ -15089,7 +15325,6 @@ export module '@theia/plugin' {
          * @param content Contents of a notebook file.
          * @param token A cancellation token.
          * @return Notebook data or a thenable that resolves to such.
-         * @stubbed
          */
         deserializeNotebook(content: Uint8Array, token: CancellationToken): NotebookData | Thenable<NotebookData>;
 
@@ -15099,7 +15334,6 @@ export module '@theia/plugin' {
          * @param data A notebook data structure.
          * @param token A cancellation token.
          * @returns An array of bytes or a thenable that resolves to such.
-         * @stubbed
          */
         serializeNotebook(data: NotebookData, token: CancellationToken): Uint8Array | Thenable<Uint8Array>;
     }
@@ -15115,7 +15349,6 @@ export module '@theia/plugin' {
          * Controls if output change events will trigger notebook document content change events and
          * if it will be used in the diff editor, defaults to false. If the content provider doesn't
          * persist the outputs in the file document, this should be set to true.
-         * @stubbed
          */
         transientOutputs?: boolean;
 
@@ -15124,7 +15357,6 @@ export module '@theia/plugin' {
          * change events and if it will be used in the diff editor, defaults to false. If the
          * content provider doesn't persist a metadata property in the file document, it should be
          * set to true.
-         * @stubbed
          */
         transientCellMetadata?: { [key: string]: boolean | undefined };
 
@@ -15133,7 +15365,6 @@ export module '@theia/plugin' {
          * content change event and if it will be used in the diff editor, defaults to false. If the
          * content provider doesn't persist a metadata property in the file document, it should be
          * set to true.
-         * @stubbed
          */
         transientDocumentMetadata?: { [key: string]: boolean | undefined };
     }
@@ -15148,13 +15379,11 @@ export module '@theia/plugin' {
          * will be created as needed up to the maximum of {@linkcode ViewColumn.Nine}.
          * Use {@linkcode ViewColumn.Beside} to open the editor to the side of the currently
          * active one.
-         * @stubbed
          */
         readonly viewColumn?: ViewColumn;
 
         /**
          * An optional flag that when `true` will stop the {@link NotebookEditor notebook editor} from taking focus.
-         * @stubbed
          */
         readonly preserveFocus?: boolean;
 
@@ -15162,13 +15391,11 @@ export module '@theia/plugin' {
          * An optional flag that controls if an {@link NotebookEditor notebook editor}-tab shows as preview. Preview tabs will
          * be replaced and reused until set to stay - either explicitly or through editing. The default behaviour depends
          * on the `workbench.editor.enablePreview`-setting.
-         * @stubbed
          */
         readonly preview?: boolean;
 
         /**
          * An optional selection to apply for the document in the {@link NotebookEditor notebook editor}.
-         * @stubbed
          */
         readonly selections?: readonly NotebookRange[];
     }
@@ -15231,7 +15458,6 @@ export module '@theia/plugin' {
          *
          * @param range The range of cells to replace
          * @param newCells The new notebook cells.
-         * @stubbed
          */
         static replaceCells(range: NotebookRange, newCells: NotebookCellData[]): NotebookEdit;
 
@@ -15240,7 +15466,6 @@ export module '@theia/plugin' {
          *
          * @param index The index to insert cells at.
          * @param newCells The new notebook cells.
-         * @stubbed
          */
         static insertCells(index: number, newCells: NotebookCellData[]): NotebookEdit;
 
@@ -15248,7 +15473,6 @@ export module '@theia/plugin' {
          * Utility to create an edit that deletes cells in a notebook.
          *
          * @param range The range of cells to delete.
-         * @stubbed
          */
         static deleteCells(range: NotebookRange): NotebookEdit;
 
@@ -15257,7 +15481,6 @@ export module '@theia/plugin' {
          *
          * @param index The index of the cell to update.
          * @param newCellMetadata The new metadata for the cell.
-         * @stubbed
          */
         static updateCellMetadata(index: number, newCellMetadata: { [key: string]: any }): NotebookEdit;
 
@@ -15265,31 +15488,26 @@ export module '@theia/plugin' {
          * Utility to create an edit that updates the notebook's metadata.
          *
          * @param newNotebookMetadata The new metadata for the notebook.
-         * @stubbed
          */
         static updateNotebookMetadata(newNotebookMetadata: { [key: string]: any }): NotebookEdit;
 
         /**
          * Range of the cells being edited. May be empty.
-         * @stubbed
          */
         range: NotebookRange;
 
         /**
          * New cells being inserted. May be empty.
-         * @stubbed
          */
         newCells: NotebookCellData[];
 
         /**
          * Optional new metadata for the cells.
-         * @stubbed
          */
         newCellMetadata?: { [key: string]: any };
 
         /**
          * Optional new metadata for the notebook.
-         * @stubbed
          */
         newNotebookMetadata?: { [key: string]: any };
 
@@ -15302,13 +15520,11 @@ export module '@theia/plugin' {
     export interface NotebookEditorSelectionChangeEvent {
         /**
          * The {@link NotebookEditor notebook editor} for which the selections have changed.
-         * @stubbed
          */
         readonly notebookEditor: NotebookEditor;
 
         /**
          * The new value for the {@link NotebookEditor.selections notebook editor's selections}.
-         * @stubbed
          */
         readonly selections: readonly NotebookRange[];
     }
@@ -15319,13 +15535,11 @@ export module '@theia/plugin' {
     export interface NotebookEditorVisibleRangesChangeEvent {
         /**
          * The {@link NotebookEditor notebook editor} for which the visible ranges have changed.
-         * @stubbed
          */
         readonly notebookEditor: NotebookEditor;
 
         /**
          * The new value for the {@link NotebookEditor.visibleRanges notebook editor's visibleRanges}.
-         * @stubbed
          */
         readonly visibleRanges: readonly NotebookRange[];
     }
@@ -15366,13 +15580,11 @@ export module '@theia/plugin' {
          *
          * _Note_ that controllers are remembered by their identifier and that extensions should use
          * stable identifiers across sessions.
-         * @stubbed
          */
         readonly id: string;
 
         /**
          * The notebook type this controller is for.
-         * @stubbed
          */
         readonly notebookType: string;
 
@@ -15390,32 +15602,27 @@ export module '@theia/plugin' {
          * myController.supportedLanguages = undefined; // falsy
          * myController.supportedLanguages = []; // falsy
          * ```
-         * @stubbed
          */
         supportedLanguages?: string[];
 
         /**
          * The human-readable label of this notebook controller.
-         * @stubbed
          */
         label: string;
 
         /**
          * The human-readable description which is rendered less prominent.
-         * @stubbed
          */
         description?: string;
 
         /**
          * The human-readable detail which is rendered less prominent.
-         * @stubbed
          */
         detail?: string;
 
         /**
          * Whether this controller supports execution order so that the
          * editor can render placeholders for them.
-         * @stubbed
          */
         supportsExecutionOrder?: boolean;
 
@@ -15431,14 +15638,12 @@ export module '@theia/plugin' {
          *
          * @param cell The notebook cell for which to create the execution.
          * @returns A notebook cell execution.
-         * @stubbed
          */
         createNotebookCellExecution(cell: NotebookCell): NotebookCellExecution;
 
         /**
          * The execute handler is invoked when the run gestures in the UI are selected, e.g Run Cell, Run All,
          * Run Selection etc. The execute handler is responsible for creating and managing {@link NotebookCellExecution execution}-objects.
-         * @stubbed
          */
         executeHandler: (cells: NotebookCell[], notebook: NotebookDocument, controller: NotebookController) => void | Thenable<void>;
 
@@ -15453,7 +15658,6 @@ export module '@theia/plugin' {
          *
          * _Note_ that supporting {@link NotebookCellExecution.token cancellation tokens} is preferred and that interrupt handlers should
          * only be used when tokens cannot be supported.
-         * @stubbed
          */
         interruptHandler?: (notebook: NotebookDocument) => void | Thenable<void>;
 
@@ -15466,7 +15670,6 @@ export module '@theia/plugin' {
          *
          * _Note_ that controller selection is persisted (by the controllers {@link NotebookController.id id}) and restored as soon as a
          * controller is re-created or as a notebook is {@link workspace.onDidOpenNotebookDocument opened}.
-         * @stubbed
          */
         readonly onDidChangeSelectedNotebooks: Event<{ readonly notebook: NotebookDocument; readonly selected: boolean }>;
 
@@ -15476,13 +15679,11 @@ export module '@theia/plugin' {
          *
          * @param notebook The notebook for which a priority is set.
          * @param affinity A controller affinity
-         * @stubbed
          */
         updateNotebookAffinity(notebook: NotebookDocument, affinity: NotebookControllerAffinity): void;
 
         /**
          * Dispose and free associated resources.
-         * @stubbed
          */
         dispose(): void;
     }
@@ -15499,7 +15700,6 @@ export module '@theia/plugin' {
 
         /**
          * The {@link NotebookCell cell} for which this execution has been created.
-         * @stubbed
          */
         readonly cell: NotebookCell;
 
@@ -15509,13 +15709,11 @@ export module '@theia/plugin' {
          *
          * _Note_ that the cancellation token will not be triggered when the {@link NotebookController controller}
          * that created this execution uses an {@link NotebookController.interruptHandler interrupt-handler}.
-         * @stubbed
          */
         readonly token: CancellationToken;
 
         /**
          * Set and unset the order of this cell execution.
-         * @stubbed
          */
         executionOrder: number | undefined;
 
@@ -15524,7 +15722,6 @@ export module '@theia/plugin' {
          *
          * @param startTime The time that execution began, in milliseconds in the Unix epoch. Used to drive the clock
          * that shows for how long a cell has been running. If not given, the clock won't be shown.
-         * @stubbed
          */
         start(startTime?: number): void;
 
@@ -15535,7 +15732,6 @@ export module '@theia/plugin' {
          * If false, a red X is shown.
          * If undefined, no check or X icon is shown.
          * @param endTime The time that execution finished, in milliseconds in the Unix epoch.
-         * @stubbed
          */
         end(success: boolean | undefined, endTime?: number): void;
 
@@ -15545,7 +15741,6 @@ export module '@theia/plugin' {
          * @param cell Cell for which output is cleared. Defaults to the {@link NotebookCellExecution.cell cell} of
          * this execution.
          * @return A thenable that resolves when the operation finished.
-         * @stubbed
          */
         clearOutput(cell?: NotebookCell): Thenable<void>;
 
@@ -15556,7 +15751,6 @@ export module '@theia/plugin' {
          * @param cell Cell for which output is cleared. Defaults to the {@link NotebookCellExecution.cell cell} of
          * this execution.
          * @return A thenable that resolves when the operation finished.
-         * @stubbed
          */
         replaceOutput(out: NotebookCellOutput | readonly NotebookCellOutput[], cell?: NotebookCell): Thenable<void>;
 
@@ -15567,7 +15761,6 @@ export module '@theia/plugin' {
          * @param cell Cell for which output is cleared. Defaults to the {@link NotebookCellExecution.cell cell} of
          * this execution.
          * @return A thenable that resolves when the operation finished.
-         * @stubbed
          */
         appendOutput(out: NotebookCellOutput | readonly NotebookCellOutput[], cell?: NotebookCell): Thenable<void>;
 
@@ -15577,7 +15770,6 @@ export module '@theia/plugin' {
          * @param items Output items that replace the items of existing output.
          * @param output Output object that already exists.
          * @return A thenable that resolves when the operation finished.
-         * @stubbed
          */
         replaceOutputItems(items: NotebookCellOutputItem | readonly NotebookCellOutputItem[], output: NotebookCellOutput): Thenable<void>;
 
@@ -15587,7 +15779,6 @@ export module '@theia/plugin' {
          * @param items Output items that are append to existing output.
          * @param output Output object that already exists.
          * @return A thenable that resolves when the operation finished.
-         * @stubbed
          */
         appendOutputItems(items: NotebookCellOutputItem | readonly NotebookCellOutputItem[], output: NotebookCellOutput): Thenable<void>;
     }
@@ -15614,7 +15805,6 @@ export module '@theia/plugin' {
     export class NotebookCellStatusBarItem {
         /**
          * The text to show for the item.
-         * @stubbed
          */
         text: string;
 
@@ -15631,25 +15821,21 @@ export module '@theia/plugin' {
          *
          * Note that if this is a {@linkcode Command} object, only the {@linkcode Command.command command} and {@linkcode Command.arguments arguments}
          * are used by the editor.
-         * @stubbed
          */
         command?: string | Command;
 
         /**
          * A tooltip to show when the item is hovered.
-         * @stubbed
          */
         tooltip?: string;
 
         /**
          * The priority of the item. A higher value item will be shown more to the left.
-         * @stubbed
          */
         priority?: number;
 
         /**
          * Accessibility information used when a screen reader interacts with this item.
-         * @stubbed
          */
         accessibilityInformation?: AccessibilityInformation;
 
@@ -15657,7 +15843,6 @@ export module '@theia/plugin' {
          * Creates a new NotebookCellStatusBarItem.
          * @param text The text to show for the item.
          * @param alignment Whether the item is aligned to the left or right.
-         * @stubbed
          */
         constructor(text: string, alignment: NotebookCellStatusBarAlignment);
     }
@@ -15668,7 +15853,6 @@ export module '@theia/plugin' {
     export interface NotebookCellStatusBarItemProvider {
         /**
          * An optional event to signal that statusbar items have changed. The provide method will be called again.
-         * @stubbed
          */
         onDidChangeCellStatusBarItems?: Event<void>;
 
@@ -15677,7 +15861,6 @@ export module '@theia/plugin' {
          * @param cell The cell for which to return items.
          * @param token A token triggered if this request should be cancelled.
          * @return One or more {@link NotebookCellStatusBarItem cell statusbar items}
-         * @stubbed
          */
         provideCellStatusBarItems(cell: NotebookCell, token: CancellationToken): ProviderResult<NotebookCellStatusBarItem | NotebookCellStatusBarItem[]>;
     }
@@ -15699,7 +15882,6 @@ export module '@theia/plugin' {
          * @param label The label of the controller.
          * @param handler The execute-handler of the controller.
          * @returns a new instance of {@link NotebookController}
-         * @stubbed
          */
         export function createNotebookController(
             id: string,
@@ -15715,7 +15897,6 @@ export module '@theia/plugin' {
          * - Note 2: A renderer only has access to messaging if requiresMessaging is set to always or optional in its notebookRenderer contribution.
          * @param rendererId The renderer ID to communicate with
          * @returns A new notebook renderer messaging object.
-         * @stubbed
          */
         export function createRendererMessaging(rendererId: string): NotebookRendererMessaging;
 
@@ -15724,630 +15905,642 @@ export module '@theia/plugin' {
          * @param notebookType The notebook type to register for.
          * @param provider A cell status bar provider.
          * @returns A Disposable that unregisters this provider when being disposed.
-         * @stubbed
          */
         export function registerNotebookCellStatusBarItemProvider(notebookType: string, provider: NotebookCellStatusBarItemProvider): Disposable;
     }
-}
 
-/**
- * Namespace for testing functionality. Tests are published by registering
- * {@link TestController} instances, then adding {@link TestItem TestItems}.
- * Controllers may also describe how to run tests by creating one or more
- * {@link TestRunProfile} instances.
- */
-export namespace tests {
+    // based on VS Code API 1.81.0
+
     /**
-     * Creates a new test controller.
+     * Namespace for testing functionality. Tests are published by registering
+     * {@link TestController} instances, then adding {@link TestItem TestItems}.
+     * Controllers may also describe how to run tests by creating one or more
+     * {@link TestRunProfile} instances.
+     */
+    export namespace tests {
+        /**
+         * Creates a new test controller.
+         *
+         * @param id Identifier for the controller, must be globally unique.
+         * @param label A human-readable label for the controller.
+         * @returns An instance of the {@link TestController}.
+         */
+        export function createTestController(id: string, label: string): TestController;
+    }
+
+    /**
+     * The kind of executions that {@link TestRunProfile TestRunProfiles} control.
+     */
+    export enum TestRunProfileKind {
+        Run = 1,
+        Debug = 2,
+        Coverage = 3,
+    }
+
+    /**
+     * Tags can be associated with {@link TestItem TestItems} and
+     * {@link TestRunProfile TestRunProfiles}. A profile with a tag can only
+     * execute tests that include that tag in their {@link TestItem.tags} array.
+     */
+    export class TestTag {
+        /**
+         * ID of the test tag. `TestTag` instances with the same ID are considered
+         * to be identical.
+         */
+        readonly id: string;
+
+        /**
+         * Creates a new TestTag instance.
+         * @param id ID of the test tag.
+         */
+        constructor(id: string);
+    }
+
+    /**
+     * A TestRunProfile describes one way to execute tests in a {@link TestController}.
+     */
+    export interface TestRunProfile {
+        /**
+         * Label shown to the user in the UI.
+         *
+         * Note that the label has some significance if the user requests that
+         * tests be re-run in a certain way. For example, if tests were run
+         * normally and the user requests to re-run them in debug mode, the editor
+         * will attempt use a configuration with the same label of the `Debug`
+         * kind. If there is no such configuration, the default will be used.
+         */
+        label: string;
+
+        /**
+         * Configures what kind of execution this profile controls. If there
+         * are no profiles for a kind, it will not be available in the UI.
+         */
+        readonly kind: TestRunProfileKind;
+
+        /**
+         * Controls whether this profile is the default action that will
+         * be taken when its kind is actioned. For example, if the user clicks
+         * the generic "run all" button, then the default profile for
+         * {@link TestRunProfileKind.Run} will be executed, although the
+         * user can configure this.
+         *
+         * Changes the user makes in their default profiles will be reflected
+         * in this property after a {@link onDidChangeDefault} event.
+         */
+        isDefault: boolean;
+
+        /**
+         * Fired when a user has changed whether this is a default profile. The
+         * event contains the new value of {@link isDefault}
+         */
+        onDidChangeDefault: Event<boolean>;
+
+        /**
+         * Whether this profile supports continuous running of requests. If so,
+         * then {@link TestRunRequest.continuous} may be set to `true`. Defaults
+         * to false.
+         */
+        supportsContinuousRun: boolean;
+
+        /**
+         * Associated tag for the profile. If this is set, only {@link TestItem}
+         * instances with the same tag will be eligible to execute in this profile.
+         */
+        tag: TestTag | undefined;
+
+        /**
+         * If this method is present, a configuration gear will be present in the
+         * UI, and this method will be invoked when it's clicked. When called,
+         * you can take other editor actions, such as showing a quick pick or
+         * opening a configuration file.
+         */
+        configureHandler: (() => void) | undefined;
+
+        /**
+         * Handler called to start a test run. When invoked, the function should call
+         * {@link TestController.createTestRun} at least once, and all test runs
+         * associated with the request should be created before the function returns
+         * or the returned promise is resolved.
+         *
+         * If {@link supportsContinuousRun} is set, then {@link TestRunRequest.continuous}
+         * may be `true`. In this case, the profile should observe changes to
+         * source code and create new test runs by calling {@link TestController.createTestRun},
+         * until the cancellation is requested on the `token`.
+         *
+         * @param request Request information for the test run.
+         * @param cancellationToken Token that signals the used asked to abort the
+         * test run. If cancellation is requested on this token, all {@link TestRun}
+         * instances associated with the request will be
+         * automatically cancelled as well.
+         */
+        runHandler: (request: TestRunRequest, token: CancellationToken) => Thenable<void> | void;
+
+        /**
+         * Deletes the run profile.
+         */
+        dispose(): void;
+    }
+
+    /**
+     * Entry point to discover and execute tests. It contains {@link TestController.items} which
+     * are used to populate the editor UI, and is associated with
+     * {@link TestController.createRunProfile run profiles} to allow
+     * for tests to be executed.
+     */
+    export interface TestController {
+        /**
+         * The id of the controller passed in {@link tests.createTestController}.
+         * This must be globally unique.
+         */
+        readonly id: string;
+
+        /**
+         * Human-readable label for the test controller.
+         */
+        label: string;
+
+        /**
+         * A collection of "top-level" {@link TestItem} instances, which can in
+         * turn have their own {@link TestItem.children children} to form the
+         * "test tree."
+         *
+         * The extension controls when to add tests. For example, extensions should
+         * add tests for a file when {@link workspace.onDidOpenTextDocument}
+         * fires in order for decorations for tests within a file to be visible.
+         *
+         * However, the editor may sometimes explicitly request children using the
+         * {@link resolveHandler} See the documentation on that method for more details.
+         */
+        readonly items: TestItemCollection;
+
+        /**
+         * Creates a profile used for running tests. Extensions must create
+         * at least one profile in order for tests to be run.
+         * @param label A human-readable label for this profile.
+         * @param kind Configures what kind of execution this profile manages.
+         * @param runHandler Function called to start a test run.
+         * @param isDefault Whether this is the default action for its kind.
+         * @param tag Profile test tag.
+         * @param supportsContinuousRun Whether the profile supports continuous running.
+         * @returns An instance of a {@link TestRunProfile}, which is automatically
+         * associated with this controller.
+         */
+        createRunProfile(label: string, kind: TestRunProfileKind, runHandler: (request: TestRunRequest, token: CancellationToken) => Thenable<void> | void, isDefault?: boolean, tag?: TestTag, supportsContinuousRun?: boolean): TestRunProfile;
+
+        /**
+         * A function provided by the extension that the editor may call to request
+         * children of a test item, if the {@link TestItem.canResolveChildren} is
+         * `true`. When called, the item should discover children and call
+         * {@link TestController.createTestItem} as children are discovered.
+         *
+         * Generally the extension manages the lifecycle of test items, but under
+         * certain conditions the editor may request the children of a specific
+         * item to be loaded. For example, if the user requests to re-run tests
+         * after reloading the editor, the editor may need to call this method
+         * to resolve the previously-run tests.
+         *
+         * The item in the explorer will automatically be marked as "busy" until
+         * the function returns or the returned thenable resolves.
+         *
+         * @param item An unresolved test item for which children are being
+         * requested, or `undefined` to resolve the controller's initial {@link TestController.items items}.
+         */
+        resolveHandler?: (item: TestItem | undefined) => Thenable<void> | void;
+
+        /**
+         * If this method is present, a refresh button will be present in the
+         * UI, and this method will be invoked when it's clicked. When called,
+         * the extension should scan the workspace for any new, changed, or
+         * removed tests.
+         *
+         * It's recommended that extensions try to update tests in realtime, using
+         * a {@link FileSystemWatcher} for example, and use this method as a fallback.
+         *
+         * @returns A thenable that resolves when tests have been refreshed.
+         */
+        refreshHandler: ((token: CancellationToken) => Thenable<void> | void) | undefined;
+
+        /**
+         * Creates a {@link TestRun}. This should be called by the
+         * {@link TestRunProfile} when a request is made to execute tests, and may
+         * also be called if a test run is detected externally. Once created, tests
+         * that are included in the request will be moved into the queued state.
+         *
+         * All runs created using the same `request` instance will be grouped
+         * together. This is useful if, for example, a single suite of tests is
+         * run on multiple platforms.
+         *
+         * @param request Test run request. Only tests inside the `include` may be
+         * modified, and tests in its `exclude` are ignored.
+         * @param name The human-readable name of the run. This can be used to
+         * disambiguate multiple sets of results in a test run. It is useful if
+         * tests are run across multiple platforms, for example.
+         * @param persist Whether the results created by the run should be
+         * persisted in the editor. This may be false if the results are coming from
+         * a file already saved externally, such as a coverage information file.
+         * @returns An instance of the {@link TestRun}. It will be considered "running"
+         * from the moment this method is invoked until {@link TestRun.end} is called.
+         */
+        createTestRun(request: TestRunRequest, name?: string, persist?: boolean): TestRun;
+
+        /**
+         * Creates a new managed {@link TestItem} instance. It can be added into
+         * the {@link TestItem.children} of an existing item, or into the
+         * {@link TestController.items}.
+         *
+         * @param id Identifier for the TestItem. The test item's ID must be unique
+         * in the {@link TestItemCollection} it's added to.
+         * @param label Human-readable label of the test item.
+         * @param uri URI this TestItem is associated with. May be a file or directory.
+         */
+        createTestItem(id: string, label: string, uri?: Uri): TestItem;
+
+        /**
+         * Marks an item's results as being outdated. This is commonly called when
+         * code or configuration changes and previous results should no longer
+         * be considered relevant. The same logic used to mark results as outdated
+         * may be used to drive {@link TestRunRequest.continuous continuous test runs}.
+         *
+         * If an item is passed to this method, test results for the item and all of
+         * its children will be marked as outdated. If no item is passed, then all
+         * test owned by the TestController will be marked as outdated.
+         *
+         * Any test runs started before the moment this method is called, including
+         * runs which may still be ongoing, will be marked as outdated and deprioritized
+         * in the editor's UI.
+         *
+         * @param item Item to mark as outdated. If undefined, all the controller's items are marked outdated.
+         */
+        invalidateTestResults(items?: TestItem | readonly TestItem[]): void;
+
+        /**
+         * Unregisters the test controller, disposing of its associated tests
+         * and unpersisted results.
+         */
+        dispose(): void;
+    }
+
+    /**
+     * A TestRunRequest is a precursor to a {@link TestRun}, which in turn is
+     * created by passing a request to {@link TestController.createTestRun}. The
+     * TestRunRequest contains information about which tests should be run, which
+     * should not be run, and how they are run (via the {@link TestRunRequest.profile profile}).
      *
-     * @param id Identifier for the controller, must be globally unique.
-     * @param label A human-readable label for the controller.
-     * @returns An instance of the {@link TestController}.
-     * @stubbed
+     * In general, TestRunRequests are created by the editor and pass to
+     * {@link TestRunProfile.runHandler}, however you can also create test
+     * requests and runs outside of the `runHandler`.
      */
-    export function createTestController(id: string, label: string): TestController;
-}
+    export class TestRunRequest {
+        /**
+         * A filter for specific tests to run. If given, the extension should run
+         * all of the included tests and all their children, excluding any tests
+         * that appear in {@link TestRunRequest.exclude}. If this property is
+         * undefined, then the extension should simply run all tests.
+         *
+         * The process of running tests should resolve the children of any test
+         * items who have not yet been resolved.
+         */
+        readonly include: readonly TestItem[] | undefined;
 
-/**
- * The kind of executions that {@link TestRunProfile TestRunProfiles} control.
- */
-export enum TestRunProfileKind {
-    Run = 1,
-    Debug = 2,
-    Coverage = 3,
-}
+        /**
+         * An array of tests the user has marked as excluded from the test included
+         * in this run; exclusions should apply after inclusions.
+         *
+         * May be omitted if no exclusions were requested. Test controllers should
+         * not run excluded tests or any children of excluded tests.
+         */
+        readonly exclude: readonly TestItem[] | undefined;
 
-/**
- * Tags can be associated with {@link TestItem TestItems} and
- * {@link TestRunProfile TestRunProfiles}. A profile with a tag can only
- * execute tests that include that tag in their {@link TestItem.tags} array.
- */
-export class TestTag {
-    /**
-     * ID of the test tag. `TestTag` instances with the same ID are considered
-     * to be identical.
-     */
-    readonly id: string;
+        /**
+         * The profile used for this request. This will always be defined
+         * for requests issued from the editor UI, though extensions may
+         * programmatically create requests not associated with any profile.
+         */
+        readonly profile: TestRunProfile | undefined;
 
-    /**
-     * Creates a new TestTag instance.
-     * @param id ID of the test tag.
-     */
-    constructor(id: string);
-}
+        /**
+         * Whether the profile should run continuously as source code changes. Only
+         * relevant for profiles that set {@link TestRunProfile.supportsContinuousRun}.
+         */
+        readonly continuous?: boolean;
 
-/**
- * A TestRunProfile describes one way to execute tests in a {@link TestController}.
- */
-export interface TestRunProfile {
-    /**
-     * Label shown to the user in the UI.
-     *
-     * Note that the label has some significance if the user requests that
-     * tests be re-run in a certain way. For example, if tests were run
-     * normally and the user requests to re-run them in debug mode, the editor
-     * will attempt use a configuration with the same label of the `Debug`
-     * kind. If there is no such configuration, the default will be used.
-     * @stubbed
-     */
-    label: string;
+        /**
+         * @param include Array of specific tests to run, or undefined to run all tests
+         * @param exclude An array of tests to exclude from the run.
+         * @param profile The run profile used for this request.
+         * @param continuous Whether to run tests continuously as source changes.
+         */
+        constructor(include?: readonly TestItem[], exclude?: readonly TestItem[], profile?: TestRunProfile, continuous?: boolean);
+    }
 
     /**
-     * Configures what kind of execution this profile controls. If there
-     * are no profiles for a kind, it will not be available in the UI.
-     * @stubbed
+     * A TestRun represents an in-progress or completed test run and
+     * provides methods to report the state of individual tests in the run.
      */
-    readonly kind: TestRunProfileKind;
+    export interface TestRun {
+        /**
+         * The human-readable name of the run. This can be used to
+         * disambiguate multiple sets of results in a test run. It is useful if
+         * tests are run across multiple platforms, for example.
+         */
+        readonly name: string | undefined;
+
+        /**
+         * A cancellation token which will be triggered when the test run is
+         * canceled from the UI.
+         */
+        readonly token: CancellationToken;
+
+        /**
+         * Whether the test run will be persisted across reloads by the editor.
+         */
+        readonly isPersisted: boolean;
+
+        /**
+         * Indicates a test is queued for later execution.
+         * @param test Test item to update.
+         */
+        enqueued(test: TestItem): void;
+
+        /**
+         * Indicates a test has started running.
+         * @param test Test item to update.
+         */
+        started(test: TestItem): void;
+
+        /**
+         * Indicates a test has been skipped.
+         * @param test Test item to update.
+         */
+        skipped(test: TestItem): void;
+
+        /**
+         * Indicates a test has failed. You should pass one or more
+         * {@link TestMessage TestMessages} to describe the failure.
+         * @param test Test item to update.
+         * @param message Messages associated with the test failure.
+         * @param duration How long the test took to execute, in milliseconds.
+         */
+        failed(test: TestItem, message: TestMessage | readonly TestMessage[], duration?: number): void;
+
+        /**
+         * Indicates a test has errored. You should pass one or more
+         * {@link TestMessage TestMessages} to describe the failure. This differs
+         * from the "failed" state in that it indicates a test that couldn't be
+         * executed at all, from a compilation error for example.
+         * @param test Test item to update.
+         * @param message Messages associated with the test failure.
+         * @param duration How long the test took to execute, in milliseconds.
+         */
+        errored(test: TestItem, message: TestMessage | readonly TestMessage[], duration?: number): void;
+
+        /**
+         * Indicates a test has passed.
+         * @param test Test item to update.
+         * @param duration How long the test took to execute, in milliseconds.
+         */
+        passed(test: TestItem, duration?: number): void;
+
+        /**
+         * Appends raw output from the test runner. On the user's request, the
+         * output will be displayed in a terminal. ANSI escape sequences,
+         * such as colors and text styles, are supported. New lines must be given
+         * as CRLF (`\r\n`) rather than LF (`\n`).
+         *
+         * @param output Output text to append.
+         * @param location Indicate that the output was logged at the given
+         * location.
+         * @param test Test item to associate the output with.
+         */
+        appendOutput(output: string, location?: Location, test?: TestItem): void;
+
+        /**
+         * Signals the end of the test run. Any tests included in the run whose
+         * states have not been updated will have their state reset.
+         */
+        end(): void;
+    }
 
     /**
-     * Controls whether this profile is the default action that will
-     * be taken when its kind is actioned. For example, if the user clicks
-     * the generic "run all" button, then the default profile for
-     * {@link TestRunProfileKind.Run} will be executed, although the
-     * user can configure this.
-     * @stubbed
-     */
-    isDefault: boolean;
-
-    /**
-     * Whether this profile supports continuous running of requests. If so,
-     * then {@link TestRunRequest.continuous} may be set to `true`. Defaults
-     * to false.
-     * @stubbed
-     */
-    supportsContinuousRun: boolean;
-
-    /**
-     * Associated tag for the profile. If this is set, only {@link TestItem}
-     * instances with the same tag will be eligible to execute in this profile.
-     * @stubbed
-     */
-    tag: TestTag | undefined;
-
-    /**
-     * If this method is present, a configuration gear will be present in the
-     * UI, and this method will be invoked when it's clicked. When called,
-     * you can take other editor actions, such as showing a quick pick or
-     * opening a configuration file.
-     * @stubbed
-     */
-    configureHandler: (() => void) | undefined;
-
-    /**
-     * Handler called to start a test run. When invoked, the function should call
-     * {@link TestController.createTestRun} at least once, and all test runs
-     * associated with the request should be created before the function returns
-     * or the returned promise is resolved.
-     *
-     * If {@link supportsContinuousRun} is set, then {@link TestRunRequest.continuous}
-     * may be `true`. In this case, the profile should observe changes to
-     * source code and create new test runs by calling {@link TestController.createTestRun},
-     * until the cancellation is requested on the `token`.
-     *
-     * @param request Request information for the test run.
-     * @param cancellationToken Token that signals the used asked to abort the
-     * test run. If cancellation is requested on this token, all {@link TestRun}
-     * instances associated with the request will be
-     * automatically cancelled as well.
-     * @stubbed
-     */
-    runHandler: (request: TestRunRequest, token: CancellationToken) => Thenable<void> | void;
-
-    /**
-     * Deletes the run profile.
-     * @stubbed
-     */
-    dispose(): void;
-}
-
-/**
- * Entry point to discover and execute tests. It contains {@link TestController.items} which
- * are used to populate the editor UI, and is associated with
- * {@link TestController.createRunProfile run profiles} to allow
- * for tests to be executed.
- */
-export interface TestController {
-    /**
-     * The id of the controller passed in {@link vscode.tests.createTestController}.
-     * This must be globally unique.
-     * @stubbed
-     */
-    readonly id: string;
-
-    /**
-     * Human-readable label for the test controller.
-     * @stubbed
-     */
-    label: string;
-
-    /**
-     * A collection of "top-level" {@link TestItem} instances, which can in
-     * turn have their own {@link TestItem.children children} to form the
-     * "test tree."
-     *
-     * The extension controls when to add tests. For example, extensions should
-     * add tests for a file when {@link vscode.workspace.onDidOpenTextDocument}
-     * fires in order for decorations for tests within a file to be visible.
-     *
-     * However, the editor may sometimes explicitly request children using the
-     * {@link resolveHandler} See the documentation on that method for more details.
-     * @stubbed
-     */
-    readonly items: TestItemCollection;
-
-    /**
-     * Creates a profile used for running tests. Extensions must create
-     * at least one profile in order for tests to be run.
-     * @param label A human-readable label for this profile.
-     * @param kind Configures what kind of execution this profile manages.
-     * @param runHandler Function called to start a test run.
-     * @param isDefault Whether this is the default action for its kind.
-     * @param tag Profile test tag.
-     * @param supportsContinuousRun Whether the profile supports continuous running.
-     * @returns An instance of a {@link TestRunProfile}, which is automatically
-     * associated with this controller.
-     * @stubbed
-     */
-    createRunProfile(label: string, kind: TestRunProfileKind, runHandler: (request: TestRunRequest, token: CancellationToken) => Thenable<void> | void, isDefault?: boolean, tag?: TestTag, supportsContinuousRun?: boolean): TestRunProfile;
-
-    /**
-     * A function provided by the extension that the editor may call to request
-     * children of a test item, if the {@link TestItem.canResolveChildren} is
-     * `true`. When called, the item should discover children and call
-     * {@link vscode.tests.createTestItem} as children are discovered.
-     *
-     * Generally the extension manages the lifecycle of test items, but under
-     * certain conditions the editor may request the children of a specific
-     * item to be loaded. For example, if the user requests to re-run tests
-     * after reloading the editor, the editor may need to call this method
-     * to resolve the previously-run tests.
-     *
-     * The item in the explorer will automatically be marked as "busy" until
-     * the function returns or the returned thenable resolves.
-     *
-     * @param item An unresolved test item for which children are being
-     * requested, or `undefined` to resolve the controller's initial {@link TestController.items items}.
-     * @stubbed
-     */
-    resolveHandler?: (item: TestItem | undefined) => Thenable<void> | void;
-
-    /**
-     * If this method is present, a refresh button will be present in the
-     * UI, and this method will be invoked when it's clicked. When called,
-     * the extension should scan the workspace for any new, changed, or
-     * removed tests.
-     *
-     * It's recommended that extensions try to update tests in realtime, using
-     * a {@link FileSystemWatcher} for example, and use this method as a fallback.
-     *
-     * @returns A thenable that resolves when tests have been refreshed.
-     * @stubbed
-     */
-    refreshHandler: ((token: CancellationToken) => Thenable<void> | void) | undefined;
-
-    /**
-     * Creates a {@link TestRun}. This should be called by the
-     * {@link TestRunProfile} when a request is made to execute tests, and may
-     * also be called if a test run is detected externally. Once created, tests
-     * that are included in the request will be moved into the queued state.
-     *
-     * All runs created using the same `request` instance will be grouped
-     * together. This is useful if, for example, a single suite of tests is
-     * run on multiple platforms.
-     *
-     * @param request Test run request. Only tests inside the `include` may be
-     * modified, and tests in its `exclude` are ignored.
-     * @param name The human-readable name of the run. This can be used to
-     * disambiguate multiple sets of results in a test run. It is useful if
-     * tests are run across multiple platforms, for example.
-     * @param persist Whether the results created by the run should be
-     * persisted in the editor. This may be false if the results are coming from
-     * a file already saved externally, such as a coverage information file.
-     * @returns An instance of the {@link TestRun}. It will be considered "running"
-     * from the moment this method is invoked until {@link TestRun.end} is called.
-     * @stubbed
-     */
-    createTestRun(request: TestRunRequest, name?: string, persist?: boolean): TestRun;
-
-    /**
-     * Creates a new managed {@link TestItem} instance. It can be added into
-     * the {@link TestItem.children} of an existing item, or into the
+     * Collection of test items, found in {@link TestItem.children} and
      * {@link TestController.items}.
-     *
-     * @param id Identifier for the TestItem. The test item's ID must be unique
-     * in the {@link TestItemCollection} it's added to.
-     * @param label Human-readable label of the test item.
-     * @param uri URI this TestItem is associated with. May be a file or directory.
-     * @stubbed
      */
-    createTestItem(id: string, label: string, uri?: Uri): TestItem;
+    export interface TestItemCollection extends Iterable<[id: string, testItem: TestItem]> {
+        /**
+         * Gets the number of items in the collection.
+         */
+        readonly size: number;
+
+        /**
+         * Replaces the items stored by the collection.
+         * @param items Items to store.
+         */
+        replace(items: readonly TestItem[]): void;
+
+        /**
+         * Iterate over each entry in this collection.
+         *
+         * @param callback Function to execute for each entry.
+         * @param thisArg The `this` context used when invoking the handler function.
+         */
+        forEach(callback: (item: TestItem, collection: TestItemCollection) => unknown, thisArg?: any): void;
+
+        /**
+         * Adds the test item to the children. If an item with the same ID already
+         * exists, it'll be replaced.
+         * @param item Item to add.
+         */
+        add(item: TestItem): void;
+
+        /**
+         * Removes a single test item from the collection.
+         * @param itemId Item ID to delete.
+         */
+        delete(itemId: string): void;
+
+        /**
+         * Efficiently gets a test item by ID, if it exists, in the children.
+         * @param itemId Item ID to get.
+         * @returns The found item or undefined if it does not exist.
+         */
+        get(itemId: string): TestItem | undefined;
+    }
 
     /**
-     * Unregisters the test controller, disposing of its associated tests
-     * and unpersisted results.
-     * @stubbed
+     * An item shown in the "test explorer" view.
+     *
+     * A `TestItem` can represent either a test suite or a test itself, since
+     * they both have similar capabilities.
      */
-    dispose(): void;
+    export interface TestItem {
+        /**
+         * Identifier for the `TestItem`. This is used to correlate
+         * test results and tests in the document with those in the workspace
+         * (test explorer). This cannot change for the lifetime of the `TestItem`,
+         * and must be unique among its parent's direct children.
+         */
+        readonly id: string;
+
+        /**
+         * URI this `TestItem` is associated with. May be a file or directory.
+         */
+        readonly uri: Uri | undefined;
+
+        /**
+         * The children of this test item. For a test suite, this may contain the
+         * individual test cases or nested suites.
+         */
+        readonly children: TestItemCollection;
+
+        /**
+         * The parent of this item. It's set automatically, and is undefined
+         * top-level items in the {@link TestController.items} and for items that
+         * aren't yet included in another item's {@link TestItem.children children}.
+         */
+        readonly parent: TestItem | undefined;
+
+        /**
+         * Tags associated with this test item. May be used in combination with
+         * {@link TestRunProfile.tag tags}, or simply as an organizational feature.
+         */
+        tags: readonly TestTag[];
+
+        /**
+         * Indicates whether this test item may have children discovered by resolving.
+         *
+         * If true, this item is shown as expandable in the Test Explorer view and
+         * expanding the item will cause {@link TestController.resolveHandler}
+         * to be invoked with the item.
+         *
+         * Default to `false`.
+         */
+        canResolveChildren: boolean;
+
+        /**
+         * Controls whether the item is shown as "busy" in the Test Explorer view.
+         * This is useful for showing status while discovering children.
+         *
+         * Defaults to `false`.
+         */
+        busy: boolean;
+
+        /**
+         * Display name describing the test case.
+         */
+        label: string;
+
+        /**
+         * Optional description that appears next to the label.
+         */
+        description?: string;
+
+        /**
+         * A string that should be used when comparing this item
+         * with other items. When `falsy` the {@link TestItem.label label}
+         * is used.
+         */
+        sortText?: string | undefined;
+
+        /**
+         * Location of the test item in its {@link TestItem.uri uri}.
+         *
+         * This is only meaningful if the `uri` points to a file.
+         */
+        range: Range | undefined;
+
+        /**
+         * Optional error encountered while loading the test.
+         *
+         * Note that this is not a test result and should only be used to represent errors in
+         * test discovery, such as syntax errors.
+         */
+        error: string | MarkdownString | undefined;
+    }
+
+    /**
+     * Message associated with the test state. Can be linked to a specific
+     * source range -- useful for assertion failures, for example.
+     */
+    export class TestMessage {
+        /**
+         * Human-readable message text to display.
+         */
+        message: string | MarkdownString;
+
+        /**
+         * Expected test output. If given with {@link TestMessage.actualOutput actualOutput }, a diff view will be shown.
+         */
+        expectedOutput?: string;
+
+        /**
+         * Actual test output. If given with {@link TestMessage.expectedOutput expectedOutput }, a diff view will be shown.
+         */
+        actualOutput?: string;
+
+        /**
+         * Associated file location.
+         */
+        location?: Location;
+
+        /**
+         * Context value of the test item. This can be used to contribute message-
+         * specific actions to the test peek view. The value set here can be found
+         * in the `testMessage` property of the following `menus` contribution points:
+         *
+         * - `testing/message/context` - context menu for the message in the results tree
+         * - `testing/message/content` - a prominent button overlaying editor content where
+         *    the message is displayed.
+         *
+         * For example:
+         *
+         * ```json
+         * "contributes": {
+         *   "menus": {
+         *     "testing/message/content": [
+         *       {
+         *         "command": "extension.deleteCommentThread",
+         *         "when": "testMessage == canApplyRichDiff"
+         *       }
+         *     ]
+         *   }
+         * }
+         * ```
+         *
+         * The command will be called with an object containing:
+         * - `test`: the {@link TestItem} the message is associated with, *if* it
+         *    is still present in the {@link TestController.items} collection.
+         * - `message`: the {@link TestMessage} instance.
+         */
+        contextValue?: string;
+
+        /**
+         * Creates a new TestMessage that will present as a diff in the editor.
+         * @param message Message to display to the user.
+         * @param expected Expected output.
+         * @param actual Actual output.
+         */
+        static diff(message: string | MarkdownString, expected: string, actual: string): TestMessage;
+
+        /**
+         * Creates a new TestMessage instance.
+         * @param message The message to show to the user.
+         */
+        constructor(message: string | MarkdownString);
+    }
+    /**
+     * Thenable is a common denominator between ES6 promises, Q, jquery.Deferred, WinJS.Promise,
+     * and others. This API makes no assumption about what promise library is being used which
+     * enables reusing existing code without migrating to a specific promise implementation. Still,
+     * we recommend the use of native promises which are available in this editor.
+     */
+    interface Thenable<T> {
+        /**
+         * Attaches callbacks for the resolution and/or rejection of the Promise.
+         * @param onfulfilled The callback to execute when the Promise is resolved.
+         * @param onrejected The callback to execute when the Promise is rejected.
+         * @returns A Promise for the completion of which ever callback is executed.
+         */
+        then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => TResult | Thenable<TResult>): Thenable<TResult>;
+        then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult>;
+    }
 }
-
-/**
- * A TestRunRequest is a precursor to a {@link TestRun}, which in turn is
- * created by passing a request to {@link tests.runTests}. The TestRunRequest
- * contains information about which tests should be run, which should not be
- * run, and how they are run (via the {@link TestRunRequest.profile profile}).
- *
- * In general, TestRunRequests are created by the editor and pass to
- * {@link TestRunProfile.runHandler}, however you can also create test
- * requests and runs outside of the `runHandler`.
- */
-export class TestRunRequest {
-    /**
-     * A filter for specific tests to run. If given, the extension should run
-     * all of the included tests and all their children, excluding any tests
-     * that appear in {@link TestRunRequest.exclude}. If this property is
-     * undefined, then the extension should simply run all tests.
-     *
-     * The process of running tests should resolve the children of any test
-     * items who have not yet been resolved.
-     */
-    readonly include: readonly TestItem[] | undefined;
-
-    /**
-     * An array of tests the user has marked as excluded from the test included
-     * in this run; exclusions should apply after inclusions.
-     *
-     * May be omitted if no exclusions were requested. Test controllers should
-     * not run excluded tests or any children of excluded tests.
-     */
-    readonly exclude: readonly TestItem[] | undefined;
-
-    /**
-     * The profile used for this request. This will always be defined
-     * for requests issued from the editor UI, though extensions may
-     * programmatically create requests not associated with any profile.
-     */
-    readonly profile: TestRunProfile | undefined;
-
-    /**
-     * Whether the profile should run continuously as source code changes. Only
-     * relevant for profiles that set {@link TestRunProfile.supportsContinuousRun}.
-     */
-    readonly continuous?: boolean;
-
-    /**
-     * @param include Array of specific tests to run, or undefined to run all tests
-     * @param exclude An array of tests to exclude from the run.
-     * @param profile The run profile used for this request.
-     * @param continuous Whether to run tests continuously as source changes.
-     */
-    constructor(include?: readonly TestItem[], exclude?: readonly TestItem[], profile?: TestRunProfile, continuous?: boolean);
-}
-
-/**
- * Options given to {@link TestController.runTests}
- */
-export interface TestRun {
-    /**
-     * The human-readable name of the run. This can be used to
-     * disambiguate multiple sets of results in a test run. It is useful if
-     * tests are run across multiple platforms, for example.
-     * @stubbed
-     */
-    readonly name: string | undefined;
-
-    /**
-     * A cancellation token which will be triggered when the test run is
-     * canceled from the UI.
-     * @stubbed
-     */
-    readonly token: CancellationToken;
-
-    /**
-     * Whether the test run will be persisted across reloads by the editor.
-     * @stubbed
-     */
-    readonly isPersisted: boolean;
-
-    /**
-     * Indicates a test is queued for later execution.
-     * @param test Test item to update.
-     * @stubbed
-     */
-    enqueued(test: TestItem): void;
-
-    /**
-     * Indicates a test has started running.
-     * @param test Test item to update.
-     * @stubbed
-     */
-    started(test: TestItem): void;
-
-    /**
-     * Indicates a test has been skipped.
-     * @param test Test item to update.
-     * @stubbed
-     */
-    skipped(test: TestItem): void;
-
-    /**
-     * Indicates a test has failed. You should pass one or more
-     * {@link TestMessage TestMessages} to describe the failure.
-     * @param test Test item to update.
-     * @param message Messages associated with the test failure.
-     * @param duration How long the test took to execute, in milliseconds.
-     * @stubbed
-     */
-    failed(test: TestItem, message: TestMessage | readonly TestMessage[], duration?: number): void;
-
-    /**
-     * Indicates a test has errored. You should pass one or more
-     * {@link TestMessage TestMessages} to describe the failure. This differs
-     * from the "failed" state in that it indicates a test that couldn't be
-     * executed at all, from a compilation error for example.
-     * @param test Test item to update.
-     * @param message Messages associated with the test failure.
-     * @param duration How long the test took to execute, in milliseconds.
-     * @stubbed
-     */
-    errored(test: TestItem, message: TestMessage | readonly TestMessage[], duration?: number): void;
-
-    /**
-     * Indicates a test has passed.
-     * @param test Test item to update.
-     * @param duration How long the test took to execute, in milliseconds.
-     * @stubbed
-     */
-    passed(test: TestItem, duration?: number): void;
-
-    /**
-     * Appends raw output from the test runner. On the user's request, the
-     * output will be displayed in a terminal. ANSI escape sequences,
-     * such as colors and text styles, are supported.
-     *
-     * @param output Output text to append.
-     * @param location Indicate that the output was logged at the given
-     * location.
-     * @param test Test item to associate the output with.
-     * @stubbed
-     */
-    appendOutput(output: string, location?: Location, test?: TestItem): void;
-
-    /**
-     * Signals that the end of the test run. Any tests included in the run whose
-     * states have not been updated will have their state reset.
-     * @stubbed
-     */
-    end(): void;
-}
-
-/**
- * Collection of test items, found in {@link TestItem.children} and
- * {@link TestController.items}.
- */
-export interface TestItemCollection extends Iterable<[id: string, testItem: TestItem]> {
-    /**
-     * Gets the number of items in the collection.
-     * @stubbed
-     */
-    readonly size: number;
-
-    /**
-     * Replaces the items stored by the collection.
-     * @param items Items to store.
-     * @stubbed
-     */
-    replace(items: readonly TestItem[]): void;
-
-    /**
-     * Iterate over each entry in this collection.
-     *
-     * @param callback Function to execute for each entry.
-     * @param thisArg The `this` context used when invoking the handler function.
-     * @stubbed
-     */
-    forEach(callback: (item: TestItem, collection: TestItemCollection) => unknown, thisArg?: any): void;
-
-    /**
-     * Adds the test item to the children. If an item with the same ID already
-     * exists, it'll be replaced.
-     * @param item Item to add.
-     * @stubbed
-     */
-    add(item: TestItem): void;
-
-    /**
-     * Removes a single test item from the collection.
-     * @param itemId Item ID to delete.
-     * @stubbed
-     */
-    delete(itemId: string): void;
-
-    /**
-     * Efficiently gets a test item by ID, if it exists, in the children.
-     * @param itemId Item ID to get.
-     * @returns The found item or undefined if it does not exist.
-     * @stubbed
-     */
-    get(itemId: string): TestItem | undefined;
-}
-
-/**
- * An item shown in the "test explorer" view.
- *
- * A `TestItem` can represent either a test suite or a test itself, since
- * they both have similar capabilities.
- */
-export interface TestItem {
-    /**
-     * Identifier for the `TestItem`. This is used to correlate
-     * test results and tests in the document with those in the workspace
-     * (test explorer). This cannot change for the lifetime of the `TestItem`,
-     * and must be unique among its parent's direct children.
-     * @stubbed
-     */
-    readonly id: string;
-
-    /**
-     * URI this `TestItem` is associated with. May be a file or directory.
-     * @stubbed
-     */
-    readonly uri: Uri | undefined;
-
-    /**
-     * The children of this test item. For a test suite, this may contain the
-     * individual test cases or nested suites.
-     * @stubbed
-     */
-    readonly children: TestItemCollection;
-
-    /**
-     * The parent of this item. It's set automatically, and is undefined
-     * top-level items in the {@link TestController.items} and for items that
-     * aren't yet included in another item's {@link TestItem.children children}.
-     * @stubbed
-     */
-    readonly parent: TestItem | undefined;
-
-    /**
-     * Tags associated with this test item. May be used in combination with
-     * {@link TestRunProfile.tags}, or simply as an organizational feature.
-     * @stubbed
-     */
-    tags: readonly TestTag[];
-
-    /**
-     * Indicates whether this test item may have children discovered by resolving.
-     *
-     * If true, this item is shown as expandable in the Test Explorer view and
-     * expanding the item will cause {@link TestController.resolveHandler}
-     * to be invoked with the item.
-     *
-     * Default to `false`.
-     * @stubbed
-     */
-    canResolveChildren: boolean;
-
-    /**
-     * Controls whether the item is shown as "busy" in the Test Explorer view.
-     * This is useful for showing status while discovering children.
-     *
-     * Defaults to `false`.
-     * @stubbed
-     */
-    busy: boolean;
-
-    /**
-     * Display name describing the test case.
-     * @stubbed
-     */
-    label: string;
-
-    /**
-     * Optional description that appears next to the label.
-     * @stubbed
-     */
-    description?: string;
-
-    /**
-     * A string that should be used when comparing this item
-     * with other items. When `falsy` the {@link TestItem.label label}
-     * is used.
-     * @stubbed
-     */
-    sortText?: string | undefined;
-
-    /**
-     * Location of the test item in its {@link TestItem.uri uri}.
-     *
-     * This is only meaningful if the `uri` points to a file.
-     * @stubbed
-     */
-    range: Range | undefined;
-
-    /**
-     * Optional error encountered while loading the test.
-     *
-     * Note that this is not a test result and should only be used to represent errors in
-     * test discovery, such as syntax errors.
-     * @stubbed
-     */
-    error: string | MarkdownString | undefined;
-}
-
-/**
- * Message associated with the test state. Can be linked to a specific
- * source range -- useful for assertion failures, for example.
- */
-export class TestMessage {
-    /**
-     * Human-readable message text to display.
-     */
-    message: string | MarkdownString;
-
-    /**
-     * Expected test output. If given with {@link TestMessage.actualOutput actualOutput }, a diff view will be shown.
-     */
-    expectedOutput?: string;
-
-    /**
-     * Actual test output. If given with {@link TestMessage.expectedOutput expectedOutput }, a diff view will be shown.
-     */
-    actualOutput?: string;
-
-    /**
-     * Associated file location.
-     */
-    location?: Location;
-
-    /**
-     * Creates a new TestMessage that will present as a diff in the editor.
-     * @param message Message to display to the user.
-     * @param expected Expected output.
-     * @param actual Actual output.
-     */
-    static diff(message: string | MarkdownString, expected: string, actual: string): TestMessage;
-
-    /**
-     * Creates a new TestMessage instance.
-     * @param message The message to show to the user.
-     */
-    constructor(message: string | MarkdownString);
-}
-
-/**
- * Thenable is a common denominator between ES6 promises, Q, jquery.Deferred, WinJS.Promise,
- * and others. This API makes no assumption about what promise library is being used which
- * enables reusing existing code without migrating to a specific promise implementation. Still,
- * we recommend the use of native promises which are available in this editor.
- */
-interface Thenable<T> {
-    /**
-     * Attaches callbacks for the resolution and/or rejection of the Promise.
-     * @param onfulfilled The callback to execute when the Promise is resolved.
-     * @param onrejected The callback to execute when the Promise is rejected.
-     * @returns A Promise for the completion of which ever callback is executed.
-     */
-    then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => TResult | Thenable<TResult>): Thenable<TResult>;
-    then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult>;
-}
-

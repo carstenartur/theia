@@ -29,8 +29,11 @@ import { ScmTreeWidget } from '@theia/scm/lib/browser/scm-tree-widget';
 import { TIMELINE_ITEM_CONTEXT_MENU } from '@theia/timeline/lib/browser/timeline-tree-widget';
 import { COMMENT_CONTEXT, COMMENT_THREAD_CONTEXT, COMMENT_TITLE } from '../comments/comment-thread-widget';
 import { VIEW_ITEM_CONTEXT_MENU } from '../view/tree-view-widget';
-import { WebviewWidget } from '../webview/webview';
+import { WEBVIEW_CONTEXT_MENU, WebviewWidget } from '../webview/webview';
 import { EDITOR_LINENUMBER_CONTEXT_MENU } from '@theia/editor/lib/browser/editor-linenumber-contribution';
+import { TEST_VIEW_CONTEXT_MENU } from '@theia/test/lib/browser/view/test-view-contribution';
+import { TEST_RUNS_CONTEXT_MENU } from '@theia/test/lib/browser/view/test-run-view-contribution';
+import { TerminalMenus } from '@theia/terminal/lib/browser/terminal-frontend-contribution';
 
 export const PLUGIN_EDITOR_TITLE_MENU = ['plugin_editor/title'];
 export const PLUGIN_EDITOR_TITLE_RUN_MENU = ['plugin_editor/title/run'];
@@ -55,8 +58,14 @@ export const implementedVSCodeContributionPoints = [
     'scm/resourceState/context',
     'scm/title',
     'timeline/item/context',
+    'testing/item/context',
+    'testing/message/context',
     'view/item/context',
-    'view/title'
+    'view/title',
+    'webview/context',
+    'extension/context',
+    'terminal/context',
+    'terminal/title/context'
 ] as const;
 
 export type ContributionPoint = (typeof implementedVSCodeContributionPoints)[number];
@@ -79,9 +88,16 @@ export const codeToTheiaMappings = new Map<ContributionPoint, MenuPath[]>([
     ['scm/resourceGroup/context', [ScmTreeWidget.RESOURCE_GROUP_CONTEXT_MENU]],
     ['scm/resourceState/context', [ScmTreeWidget.RESOURCE_CONTEXT_MENU]],
     ['scm/title', [PLUGIN_SCM_TITLE_MENU]],
+    ['testing/item/context', [TEST_VIEW_CONTEXT_MENU]],
+    ['testing/message/context', [TEST_RUNS_CONTEXT_MENU]],
     ['timeline/item/context', [TIMELINE_ITEM_CONTEXT_MENU]],
     ['view/item/context', [VIEW_ITEM_CONTEXT_MENU]],
     ['view/title', [PLUGIN_VIEW_TITLE_MENU]],
+    ['webview/context', [WEBVIEW_CONTEXT_MENU]],
+    ['extension/context', [['extensions_context_menu', '3_contribution']]],
+    ['terminal/context', [TerminalMenus.TERMINAL_CONTRIBUTIONS]],
+    ['terminal/title/context', [TerminalMenus.TERMINAL_TITLE_CONTRIBUTIONS]]
+
 ]);
 
 type CodeEditorWidget = EditorWidget | WebviewWidget;

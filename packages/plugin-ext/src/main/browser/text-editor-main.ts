@@ -151,13 +151,16 @@ export class TextEditorMain implements Disposable {
         }
 
         if (typeof newConfiguration.lineNumbers !== 'undefined') {
-            let lineNumbers: 'on' | 'off' | 'relative';
+            let lineNumbers: 'on' | 'off' | 'relative' | 'interval';
             switch (newConfiguration.lineNumbers) {
                 case TextEditorLineNumbersStyle.On:
                     lineNumbers = 'on';
                     break;
                 case TextEditorLineNumbersStyle.Relative:
                     lineNumbers = 'relative';
+                    break;
+                case TextEditorLineNumbersStyle.Interval:
+                    lineNumbers = 'interval';
                     break;
                 default:
                     lineNumbers = 'off';
@@ -193,6 +196,13 @@ export class TextEditorMain implements Disposable {
         }
         if (typeof newConfiguration.tabSize !== 'undefined') {
             newOpts.tabSize = newConfiguration.tabSize;
+        }
+        if (typeof newConfiguration.indentSize !== 'undefined') {
+            if (newConfiguration.indentSize === 'tabSize') {
+                newOpts.indentSize = newConfiguration.tabSize;
+            } else if (typeof newConfiguration.indentSize == 'number') {
+                newOpts.indentSize = newConfiguration.indentSize;
+            }
         }
         this.model.updateOptions(newOpts);
     }
@@ -393,6 +403,9 @@ export class TextEditorPropertiesMain {
                 case monaco.editor.RenderLineNumbersType.Relative:
                     lineNumbers = TextEditorLineNumbersStyle.Relative;
                     break;
+                case monaco.editor.RenderLineNumbersType.Interval:
+                    lineNumbers = TextEditorLineNumbersStyle.Interval;
+                    break;
                 default:
                     lineNumbers = TextEditorLineNumbersStyle.On;
                     break;
@@ -408,6 +421,7 @@ export class TextEditorPropertiesMain {
         const modelOptions = model.getOptions();
         return {
             insertSpaces: modelOptions.insertSpaces,
+            indentSize: modelOptions.indentSize,
             tabSize: modelOptions.tabSize,
             cursorStyle,
             lineNumbers,
@@ -443,6 +457,7 @@ export class TextEditorPropertiesMain {
         return (
             a.tabSize === b.tabSize
             && a.insertSpaces === b.insertSpaces
+            && a.indentSize === b.indentSize
             && a.cursorStyle === b.cursorStyle
             && a.lineNumbers === b.lineNumbers
         );

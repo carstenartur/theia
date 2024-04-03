@@ -14,11 +14,16 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 
+import { EOL } from 'os';
 import { AbstractGenerator } from './abstract-generator';
 
 export class BackendGenerator extends AbstractGenerator {
 
     async generate(): Promise<void> {
+        if (this.pck.isBrowserOnly()) {
+            // no backend generation in case of browser-only target
+            return;
+        }
         const backendModules = this.pck.targetBackendModules;
         await this.write(this.pck.backend('server.js'), this.compileServer(backendModules));
         await this.write(this.pck.backend('main.js'), this.compileMain(backendModules));
@@ -53,44 +58,49 @@ const { Container } = require('inversify');
 const { resolve } = require('path');
 const { app } = require('electron');
 
-// Fix the window reloading issue, see: https://github.com/electron/electron/issues/22119
-app.allowRendererProcessReuse = false;
-
 const config = ${this.prettyStringify(this.pck.props.frontend.config)};
 const isSingleInstance = ${this.pck.props.backend.config.singleInstance === true ? 'true' : 'false'};
 
-if (isSingleInstance && !app.requestSingleInstanceLock()) {
-    // There is another instance running, exit now. The other instance will request focus.
-    app.quit();
-    return;
-}
-
-const container = new Container();
-container.load(electronMainApplicationModule);
-container.bind(ElectronMainApplicationGlobals).toConstantValue({
-    THEIA_APP_PROJECT_PATH: resolve(__dirname, '..', '..'),
-    THEIA_BACKEND_MAIN_PATH: resolve(__dirname, 'main.js'),
-    THEIA_FRONTEND_HTML_PATH: resolve(__dirname, '..', '..', 'lib', 'frontend', 'index.html'),
-});
-
-function load(raw) {
-    return Promise.resolve(raw.default).then(module =>
-        container.load(module)
-    );
-}
-
-async function start() {
-    const application = container.get(ElectronMainApplication);
-    await application.start(config);
-}
-
-module.exports = Promise.resolve()${this.compileElectronMainModuleImports(electronMainModules)}
-    .then(start).catch(reason => {
-        console.error('Failed to start the electron application.');
-        if (reason) {
-            console.error(reason);
-        }
+(async () => {
+    if (isSingleInstance && !app.requestSingleInstanceLock()) {
+        // There is another instance running, exit now. The other instance will request focus.
+        app.quit();
+        return;
+    }
+    
+    const container = new Container();
+    container.load(electronMainApplicationModule);
+    container.bind(ElectronMainApplicationGlobals).toConstantValue({
+        THEIA_APP_PROJECT_PATH: resolve(__dirname, '..', '..'),
+        THEIA_BACKEND_MAIN_PATH: resolve(__dirname, 'main.js'),
+        THEIA_FRONTEND_HTML_PATH: resolve(__dirname, '..', '..', 'lib', 'frontend', 'index.html'),
     });
+    
+    function load(raw) {
+        return Promise.resolve(raw.default).then(module =>
+            container.load(module)
+        );
+    }
+    
+    async function start() {
+        const application = container.get(ElectronMainApplication);
+        await application.start(config);
+    }
+
+    try {
+${Array.from(electronMainModules?.values() ?? [], jsModulePath => `\
+        await load(require('${jsModulePath}'));`).join(EOL)}
+        await start();
+    } catch (reason) {
+        if (typeof reason !== 'number') {
+            console.error('Failed to start the electron application.');
+            if (reason) {
+                console.error(reason);
+            }
+        }
+        app.quit();
+    };
+})();
 `;
     }
 
@@ -126,27 +136,42 @@ function defaultServeStatic(app) {
 }
 
 function load(raw) {
-    return Promise.resolve(raw.default).then(
-        module => container.load(module)
+    return Promise.resolve(raw).then(
+        module => container.load(module.default)
     );
 }
 
-function start(port, host, argv = process.argv) {
+async function start(port, host, argv = process.argv) {
     if (!container.isBound(BackendApplicationServer)) {
         container.bind(BackendApplicationServer).toConstantValue({ configure: defaultServeStatic });
     }
-    return container.get(CliManager).initializeCli(argv).then(() => {
-        return container.get(BackendApplication).start(port, host);
-    });
+    let result = undefined;
+    await container.get(CliManager).initializeCli(argv.slice(2), 
+        () => container.get(BackendApplication).configured,
+        async () => {
+            result = container.get(BackendApplication).start(port, host);
+        });
+    if (result) {
+        return result;
+    } else {
+        return Promise.reject(0);
+    }
 }
 
-module.exports = (port, host, argv) => Promise.resolve()${this.compileBackendModuleImports(backendModules)}
-    .then(() => start(port, host, argv)).catch(error => {
-        console.error('Failed to start the backend application:');
-        console.error(error);
-        process.exitCode = 1;
+module.exports = async (port, host, argv) => {
+    try {
+${Array.from(backendModules.values(), jsModulePath => `\
+        await load(require('${jsModulePath}'));`).join(EOL)}
+        return await start(port, host, argv);
+    } catch (error) {
+        if (typeof error !== 'number') {
+            console.error('Failed to start the backend application:');
+            console.error(error); 
+            process.exitCode = 1;
+        }
         throw error;
-    });
+    }
+}
 `;
     }
 
@@ -160,9 +185,9 @@ BackendApplicationConfigProvider.set(${this.prettyStringify(this.pck.props.backe
 const serverModule = require('./server');
 const serverAddress = main.start(serverModule());
 
-serverAddress.then(({ port, address }) => {
-    if (process && process.send) {
-        process.send({ port, address });
+serverAddress.then((addressInfo) => {
+    if (process && process.send && addressInfo) {
+        process.send(addressInfo);
     }
 });
 

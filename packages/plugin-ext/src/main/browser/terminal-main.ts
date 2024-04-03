@@ -18,18 +18,25 @@ import { interfaces } from '@theia/core/shared/inversify';
 import { ApplicationShell, WidgetOpenerOptions } from '@theia/core/lib/browser';
 import { TerminalEditorLocationOptions, TerminalOptions } from '@theia/plugin';
 import { TerminalLocation, TerminalWidget } from '@theia/terminal/lib/browser/base/terminal-widget';
+import { TerminalProfileService } from '@theia/terminal/lib/browser/terminal-profile-service';
 import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
 import { TerminalServiceMain, TerminalServiceExt, MAIN_RPC_CONTEXT } from '../../common/plugin-api-rpc';
 import { RPCProtocol } from '../../common/rpc-protocol';
 import { Disposable, DisposableCollection } from '@theia/core/lib/common/disposable';
-import { SerializableEnvironmentVariableCollection } from '@theia/terminal/lib/common/base-terminal-protocol';
-import { ShellTerminalServerProxy } from '@theia/terminal/lib/common/shell-terminal-protocol';
+import { SerializableEnvironmentVariableCollection, ShellTerminalServerProxy } from '@theia/terminal/lib/common/shell-terminal-protocol';
 import { TerminalLink, TerminalLinkProvider } from '@theia/terminal/lib/browser/terminal-link-provider';
 import { URI } from '@theia/core/lib/common/uri';
 import { getIconClass } from '../../plugin/terminal-ext';
 import { PluginTerminalRegistry } from './plugin-terminal-registry';
 import { CancellationToken } from '@theia/core';
 import { HostedPluginSupport } from '../../hosted/browser/hosted-plugin';
+import debounce = require('@theia/core/shared/lodash.debounce');
+
+interface TerminalObserverData {
+    nrOfLinesToMatch: number;
+    outputMatcherRegex: RegExp
+    disposables: DisposableCollection;
+}
 
 /**
  * Plugin api service allows working with terminal emulator.
@@ -37,6 +44,7 @@ import { HostedPluginSupport } from '../../hosted/browser/hosted-plugin';
 export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLinkProvider, Disposable {
 
     private readonly terminals: TerminalService;
+    private readonly terminalProfileService: TerminalProfileService;
     private readonly pluginTerminalRegistry: PluginTerminalRegistry;
     private readonly hostedPluginSupport: HostedPluginSupport;
     private readonly shell: ApplicationShell;
@@ -45,9 +53,11 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
     private readonly terminalLinkProviders: string[] = [];
 
     private readonly toDispose = new DisposableCollection();
+    private readonly observers = new Map<string, TerminalObserverData>();
 
     constructor(rpc: RPCProtocol, container: interfaces.Container) {
         this.terminals = container.get(TerminalService);
+        this.terminalProfileService = container.get(TerminalProfileService);
         this.pluginTerminalRegistry = container.get(PluginTerminalRegistry);
         this.hostedPluginSupport = container.get(HostedPluginSupport);
         this.shell = container.get(ApplicationShell);
@@ -59,15 +69,16 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         }
         this.toDispose.push(this.terminals.onDidChangeCurrentTerminal(() => this.updateCurrentTerminal()));
         this.updateCurrentTerminal();
-        if (this.shellTerminalServer.collections.size > 0) {
-            const collectionAsArray = [...this.shellTerminalServer.collections.entries()];
-            const serializedCollections: [string, SerializableEnvironmentVariableCollection][] = collectionAsArray.map(e => [e[0], [...e[1].map.entries()]]);
-            this.extProxy.$initEnvironmentVariableCollections(serializedCollections);
-        }
+
+        this.shellTerminalServer.getEnvVarCollections().then(collections => this.extProxy.$initEnvironmentVariableCollections(collections));
 
         this.pluginTerminalRegistry.startCallback = id => this.startProfile(id);
 
         container.bind(TerminalLinkProvider).toDynamicValue(() => this);
+
+        this.toDispose.push(this.terminalProfileService.onDidChangeDefaultShell(shell => {
+            this.extProxy.$setShell(shell);
+        }));
     }
 
     async startProfile(id: string): Promise<string> {
@@ -75,9 +86,9 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         return this.extProxy.$startProfile(id, CancellationToken.None);
     }
 
-    $setEnvironmentVariableCollection(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection | undefined): void {
+    $setEnvironmentVariableCollection(persistent: boolean, extensionIdentifier: string, rootUri: string, collection: SerializableEnvironmentVariableCollection): void {
         if (collection) {
-            this.shellTerminalServer.setCollection(extensionIdentifier, persistent, collection);
+            this.shellTerminalServer.setCollection(extensionIdentifier, rootUri, persistent, collection, collection.description);
         } else {
             this.shellTerminalServer.deleteCollection(extensionIdentifier);
         }
@@ -118,6 +129,8 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
             this.extProxy.$terminalOnInput(terminal.id, data);
             this.extProxy.$terminalStateChanged(terminal.id);
         }));
+
+        this.observers.forEach((observer, id) => this.observeTerminal(id, terminal, observer));
     }
 
     $write(id: string, data: string): void {
@@ -178,11 +191,11 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         return undefined;
     }
 
-    $sendText(id: string, text: string, addNewLine?: boolean): void {
+    $sendText(id: string, text: string, shouldExecute?: boolean): void {
         const terminal = this.terminals.getById(id);
         if (terminal) {
             text = text.replace(/\r?\n/g, '\r');
-            if (addNewLine && text.charAt(text.length - 1) !== '\r') {
+            if (shouldExecute && text.charAt(text.length - 1) !== '\r') {
                 text += '\r';
             }
             terminal.sendText(text);
@@ -287,6 +300,42 @@ export class TerminalServiceMainImpl implements TerminalServiceMain, TerminalLin
         const index = this.terminalLinkProviders.indexOf(providerId);
         if (index > -1) {
             this.terminalLinkProviders.splice(index, 1);
+        }
+    }
+
+    $registerTerminalObserver(id: string, nrOfLinesToMatch: number, outputMatcherRegex: string): void {
+        const observerData = {
+            nrOfLinesToMatch: nrOfLinesToMatch,
+            outputMatcherRegex: new RegExp(outputMatcherRegex, 'm'),
+            disposables: new DisposableCollection()
+        };
+        this.observers.set(id, observerData);
+        this.terminals.all.forEach(terminal => {
+            this.observeTerminal(id, terminal, observerData);
+        });
+    }
+
+    protected observeTerminal(observerId: string, terminal: TerminalWidget, observerData: TerminalObserverData): void {
+        const doMatch = debounce(() => {
+            const lineCount = Math.min(observerData.nrOfLinesToMatch, terminal.buffer.length);
+            const lines = terminal.buffer.getLines(terminal.buffer.length - lineCount, lineCount);
+            const result = lines.join('\n').match(observerData.outputMatcherRegex);
+            if (result) {
+                this.extProxy.$reportOutputMatch(observerId, result.map(value => value));
+            }
+        });
+        observerData.disposables.push(terminal.onOutput(output => {
+            doMatch();
+        }));
+    }
+
+    $unregisterTerminalObserver(id: string): void {
+        const observer = this.observers.get(id);
+        if (observer) {
+            observer.disposables.dispose();
+            this.observers.delete(id);
+        } else {
+            throw new Error(`Unregistering unknown terminal observer: ${id}`);
         }
     }
 

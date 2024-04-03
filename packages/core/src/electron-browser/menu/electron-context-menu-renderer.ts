@@ -100,15 +100,17 @@ export class ElectronContextMenuRenderer extends BrowserContextMenuRenderer {
 
     protected override doRender(options: RenderContextMenuOptions): ContextMenuAccess {
         if (this.useNativeStyle) {
-            const { menuPath, anchor, args, onHide, context, contextKeyService } = options;
-            const menu = this.electronMenuFactory.createElectronContextMenu(menuPath, args, context, contextKeyService);
+            const { menuPath, anchor, args, onHide, context, contextKeyService, skipSingleRootNode } = options;
+            const menu = this.electronMenuFactory.createElectronContextMenu(menuPath, args, context, contextKeyService, skipSingleRootNode);
             const { x, y } = coordinateFromAnchor(anchor);
+
+            const windowName = options.context?.ownerDocument.defaultView?.Window.name;
 
             const menuHandle = window.electronTheiaCore.popup(menu, x, y, () => {
                 if (onHide) {
                     onHide();
                 }
-            });
+            }, windowName);
             // native context menu stops the event loop, so there is no keyboard events
             this.context.resetAltPressed();
             return new ElectronContextMenuAccess(menuHandle);

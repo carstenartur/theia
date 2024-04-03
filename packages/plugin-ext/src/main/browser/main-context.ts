@@ -44,8 +44,6 @@ import { EditorManager } from '@theia/editor/lib/browser';
 import { EditorModelService } from './text-editor-model-service';
 import { OpenerService } from '@theia/core/lib/browser/opener-service';
 import { ApplicationShell } from '@theia/core/lib/browser/shell/application-shell';
-import { MonacoBulkEditService } from '@theia/monaco/lib/browser/monaco-bulk-edit-service';
-import { MonacoEditorService } from '@theia/monaco/lib/browser/monaco-editor-service';
 import { MainFileSystemEventService } from './main-file-system-event-service';
 import { LabelServiceMainImpl } from './label-service-main';
 import { TimelineMainImpl } from './timeline-main';
@@ -59,7 +57,14 @@ import { MonacoLanguages } from '@theia/monaco/lib/browser/monaco-languages';
 import { UntitledResourceResolver } from '@theia/core/lib/common/resource';
 import { ThemeService } from '@theia/core/lib/browser/theming';
 import { TabsMainImpl } from './tabs/tabs-main';
+import { NotebooksMainImpl } from './notebooks/notebooks-main';
 import { LocalizationMainImpl } from './localization-main';
+import { NotebookRenderersMainImpl } from './notebooks/notebook-renderers-main';
+import { NotebookEditorsMainImpl } from './notebooks/notebook-editors-main';
+import { NotebookDocumentsMainImpl } from './notebooks/notebook-documents-main';
+import { NotebookKernelsMainImpl } from './notebooks/notebook-kernels-main';
+import { NotebooksAndEditorsMain } from './notebooks/notebook-documents-and-editors-main';
+import { TestingMainImpl } from './test-main';
 
 export function setUpPluginApi(rpc: RPCProtocol, container: interfaces.Container): void {
     const authenticationMain = new AuthenticationMainImpl(rpc, container);
@@ -85,18 +90,27 @@ export function setUpPluginApi(rpc: RPCProtocol, container: interfaces.Container
 
     const editorsAndDocuments = new EditorsAndDocumentsMain(rpc, container);
 
+    const notebookDocumentsMain = new NotebookDocumentsMainImpl(rpc, container);
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOK_DOCUMENTS_MAIN, notebookDocumentsMain);
+
     const modelService = container.get(EditorModelService);
     const editorManager = container.get(EditorManager);
     const openerService = container.get<OpenerService>(OpenerService);
     const shell = container.get(ApplicationShell);
     const untitledResourceResolver = container.get(UntitledResourceResolver);
     const languageService = container.get(MonacoLanguages);
-    const documentsMain = new DocumentsMainImpl(editorsAndDocuments, modelService, rpc, editorManager, openerService, shell, untitledResourceResolver, languageService);
+    const documentsMain = new DocumentsMainImpl(editorsAndDocuments, notebookDocumentsMain, modelService, rpc,
+        editorManager, openerService, shell, untitledResourceResolver, languageService);
     rpc.set(PLUGIN_RPC_CONTEXT.DOCUMENTS_MAIN, documentsMain);
 
-    const bulkEditService = container.get(MonacoBulkEditService);
-    const monacoEditorService = container.get(MonacoEditorService);
-    const editorsMain = new TextEditorsMainImpl(editorsAndDocuments, documentsMain, rpc, bulkEditService, monacoEditorService);
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOKS_MAIN, new NotebooksMainImpl(rpc, container, commandRegistryMain));
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOK_RENDERERS_MAIN, new NotebookRenderersMainImpl(rpc, container));
+    const notebookEditorsMain = new NotebookEditorsMainImpl(rpc, container);
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOK_EDITORS_MAIN, notebookEditorsMain);
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOK_DOCUMENTS_AND_EDITORS_MAIN, new NotebooksAndEditorsMain(rpc, container, notebookDocumentsMain, notebookEditorsMain));
+    rpc.set(PLUGIN_RPC_CONTEXT.NOTEBOOK_KERNELS_MAIN, new NotebookKernelsMainImpl(rpc, container));
+
+    const editorsMain = new TextEditorsMainImpl(editorsAndDocuments, documentsMain, rpc, container);
     rpc.set(PLUGIN_RPC_CONTEXT.TEXT_EDITORS_MAIN, editorsMain);
 
     // start listening only after all clients are subscribed to events
@@ -110,6 +124,9 @@ export function setUpPluginApi(rpc: RPCProtocol, container: interfaces.Container
 
     const notificationMain = new NotificationMainImpl(rpc, container);
     rpc.set(PLUGIN_RPC_CONTEXT.NOTIFICATION_MAIN, notificationMain);
+
+    const testingMain = new TestingMainImpl(rpc, container, commandRegistryMain);
+    rpc.set(PLUGIN_RPC_CONTEXT.TESTING_MAIN, testingMain);
 
     const terminalMain = new TerminalServiceMainImpl(rpc, container);
     rpc.set(PLUGIN_RPC_CONTEXT.TERMINAL_MAIN, terminalMain);

@@ -8,7 +8,6 @@
 <div id="badges" align="center">
 
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-curved)](https://github.com/eclipse-theia/theia/labels/help%20wanted)
-  [![Discourse status](https://img.shields.io/discourse/status?label=Chat&server=https%3A%2F%2Fcommunity.theia-ide.org%2F)](https://community.theia-ide.org/)
   [![Build Status](https://github.com/eclipse-theia/theia/workflows/Build/badge.svg?branch=master)](https://github.com/eclipse-theia/theia/actions?query=branch%3Amaster+event%3Apush+event%3Aschedule)
   [![Publish VS Code Built-in Extensions](https://github.com/eclipse-theia/vscode-builtin-extensions/actions/workflows/publish-vsx-latest.yml/badge.svg?branch=master)](https://github.com/eclipse-theia/vscode-builtin-extensions/actions/workflows/publish-vsx-latest.yml)
   [![Open questions](https://img.shields.io/badge/Open-questions-blue.svg?style=flat-curved)](https://github.com/eclipse-theia/theia/discussions/categories/q-a)
@@ -20,6 +19,7 @@ Eclipse Theia is an extensible framework to develop full-fledged multi-language 
 </div>
 
 - [Website](#website)
+- [Repositories](#repositories)
 - [Releases](#releases)
 - [Scope](#scope)
 - [Roadmap](#roadmap)
@@ -39,6 +39,9 @@ Eclipse Theia is an extensible framework to develop full-fledged multi-language 
 ## Website
 
 [Visit the Eclipse Theia website](http://www.theia-ide.org) for more information and [the Theia documentation](http://www.theia-ide.org/doc).
+
+## Repositories
+This is the main repository for the Eclipse Theia project, containing the sources of the Theia Platform. Please open generic discussions, bug reports and feature requests about Theia on this repository. The Theia project also includes additional repositories, e.g. for the [artifacts building the Theia IDE](https://github.com/eclipse-theia/theia-blueprint) and the [Theia website](https://github.com/eclipse-theia/theia-website). Please also see the [overview of all Theia project repositories](https://github.com/eclipse-theia).
 
 ## Releases
 
@@ -88,7 +91,7 @@ Read below to learn how to take part in improving Theia:
 
 Read below how to engage with Theia community:
 
-- Join the discussion on [Discourse](https://community.theia-ide.org/).
+- Join the discussion on [GitHub](https://github.com/eclipse-theia/theia/discussions).
 - Ask a question, request a new feature and file a bug with [GitHub issues](https://github.com/eclipse-theia/theia/issues/new/choose).
 - Vote on existing GitHub issues by reacting with a 👍. We regularly check issues with votes!
 - Star the repository to show your support.

@@ -109,7 +109,15 @@ export class MonacoTextModelService implements ITextModelService {
         return this._models.acquire(raw.toString());
     }
 
-    protected async loadModel(uri: URI): Promise<MonacoEditorModel> {
+    /**
+     * creates a model which is not saved by the model service.
+     * this will therefore also not be created on backend side.
+     */
+    createUnmangedModel(raw: monaco.Uri | URI): Promise<MonacoEditorModel> {
+        return this.loadModel(new URI(raw.toString()));
+    }
+
+    async loadModel(uri: URI): Promise<MonacoEditorModel> {
         await this.editorPreferences.ready;
         const resource = await this.resourceProvider(uri);
         const model = await (await this.createModel(resource)).load();
@@ -127,12 +135,15 @@ export class MonacoTextModelService implements ITextModelService {
 
     protected readonly modelOptions: { [name: string]: (keyof ITextModelUpdateOptions | undefined) } = {
         'editor.tabSize': 'tabSize',
-        'editor.insertSpaces': 'insertSpaces'
+        'editor.insertSpaces': 'insertSpaces',
+        'editor.indentSize': 'indentSize'
     };
 
     protected toModelOption(editorPreference: EditorPreferenceChange['preferenceName']): keyof ITextModelUpdateOptions | undefined {
         switch (editorPreference) {
             case 'editor.tabSize': return 'tabSize';
+            // @monaco-uplift: uncomment this line once 'editor.indentSize' preference is available
+            //  case 'editor.indentSize': return 'indentSize';
             case 'editor.insertSpaces': return 'insertSpaces';
             case 'editor.bracketPairColorization.enabled':
             case 'editor.bracketPairColorization.independentColorPoolPerBracketType':
@@ -170,6 +181,8 @@ export class MonacoTextModelService implements ITextModelService {
         const overrideIdentifier = typeof arg === 'string' ? undefined : arg.languageId;
         return {
             tabSize: this.editorPreferences.get({ preferenceName: 'editor.tabSize', overrideIdentifier }, undefined, uri),
+            // @monaco-uplift: when available, switch to 'editor.indentSize' preference.
+            indentSize: this.editorPreferences.get({ preferenceName: 'editor.tabSize', overrideIdentifier }, undefined, uri),
             insertSpaces: this.editorPreferences.get({ preferenceName: 'editor.insertSpaces', overrideIdentifier }, undefined, uri),
             bracketColorizationOptions: {
                 enabled: this.editorPreferences.get({ preferenceName: 'editor.bracketPairColorization.enabled', overrideIdentifier }, undefined, uri),
@@ -189,6 +202,6 @@ export class MonacoTextModelService implements ITextModelService {
     }
 
     canHandleResource(resource: monaco.Uri): boolean {
-        return this.fileService.canHandleResource(new URI(resource));
+        return this.fileService.canHandleResource(URI.fromComponents(resource));
     }
 }

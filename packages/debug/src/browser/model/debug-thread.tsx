@@ -15,7 +15,7 @@
 // *****************************************************************************
 
 import * as React from '@theia/core/shared/react';
-import { CancellationTokenSource, Emitter, Event } from '@theia/core';
+import { CancellationTokenSource, Emitter, Event, nls } from '@theia/core';
 import { DebugProtocol } from '@vscode/debugprotocol/lib/debugProtocol';
 import { TreeElement } from '@theia/core/lib/browser/source-tree';
 import { DebugStackFrame } from './debug-stack-frame';
@@ -229,12 +229,57 @@ export class DebugThread extends DebugThreadData implements TreeElement {
     }
 
     render(): React.ReactNode {
-        const reason = this.stoppedDetails && this.stoppedDetails.reason;
-        const status = this.stoppedDetails ? reason ? `Paused on ${reason}` : 'Paused' : 'Running';
-        return <div className='theia-debug-thread' title='Thread'>
-            <span className='label'>{this.raw.name}</span>
-            <span className='status'>{status}</span>
-        </div>;
+        return (
+            <div className="theia-debug-thread" title={nls.localizeByDefault('Session')}>
+                <span className="label">{this.raw.name}</span>
+                <span className="status">{this.threadStatus()}</span>
+            </div>
+        );
     }
 
+    protected threadStatus(): string {
+
+        if (!this.stoppedDetails) {
+            return nls.localizeByDefault('Running');
+        }
+
+        const description = this.stoppedDetails.description;
+
+        if (description) {
+            // According to DAP we must show description as is. Translation is made by debug adapter
+            return description;
+        }
+
+        const reason = this.stoppedDetails.reason;
+        const localizedReason = this.getLocalizedReason(reason);
+
+        return reason
+                ? nls.localizeByDefault('Paused on {0}', localizedReason)
+                : nls.localizeByDefault('Paused');
+    }
+
+    protected getLocalizedReason(reason: string | undefined): string {
+        switch (reason) {
+            case 'step':
+                return nls.localize('theia/debug/step', 'step');
+            case 'breakpoint':
+                return nls.localize('theia/debug/breakpoint', 'breakpoint');
+            case 'exception':
+                return nls.localize('theia/debug/exception', 'exception');
+            case 'pause':
+                return nls.localize('theia/debug/pause', 'pause');
+            case 'entry':
+                return nls.localize('theia/debug/entry', 'entry');
+            case 'goto':
+                return nls.localize('theia/debug/goto', 'goto');
+            case 'function breakpoint':
+                return nls.localize('theia/debug/functionBreakpoint', 'function breakpoint');
+             case 'data breakpoint':
+                return nls.localize('theia/debug/dataBreakpoint', 'data breakpoint');
+            case 'instruction breakpoint':
+                return nls.localize('theia/debug/instructionBreakpoint', 'instruction breakpoint');
+            default:
+                return '';
+        }
+    }
 }

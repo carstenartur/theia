@@ -18,9 +18,10 @@
 
 import debounce = require('lodash.debounce');
 import { injectable, inject, optional } from 'inversify';
-import { MAIN_MENU_BAR, SETTINGS_MENU, MenuContribution, MenuModelRegistry, ACCOUNTS_MENU } from '../common/menu';
+import { MAIN_MENU_BAR, MANAGE_MENU, MenuContribution, MenuModelRegistry, ACCOUNTS_MENU } from '../common/menu';
 import { KeybindingContribution, KeybindingRegistry } from './keybinding';
-import { FrontendApplication, FrontendApplicationContribution, OnWillStopAction } from './frontend-application';
+import { FrontendApplication } from './frontend-application';
+import { FrontendApplicationContribution, OnWillStopAction } from './frontend-application-contribution';
 import { CommandContribution, CommandRegistry, Command } from '../common/command';
 import { UriAwareCommandHandler } from '../common/uri-command-handler';
 import { SelectionService } from '../common/selection-service';
@@ -36,7 +37,7 @@ import { OS, isOSX, isWindows, EOL } from '../common/os';
 import { ResourceContextKey } from './resource-context-key';
 import { UriSelection } from '../common/selection';
 import { StorageService } from './storage-service';
-import { Navigatable } from './navigatable';
+import { Navigatable, NavigatableWidget } from './navigatable';
 import { QuickViewService } from './quick-input/quick-view-service';
 import { environment } from '@theia/application-package/lib/environment';
 import { IconTheme, IconThemeService } from './icon-theme-service';
@@ -52,23 +53,24 @@ import { UTF8 } from '../common/encodings';
 import { EnvVariablesServer } from '../common/env-variables';
 import { AuthenticationService } from './authentication-service';
 import { FormatType, Saveable, SaveOptions } from './saveable';
-import { QuickInputService, QuickPickItem, QuickPickItemOrSeparator } from './quick-input';
+import { QuickInputService, QuickPickItem, QuickPickItemOrSeparator, QuickPickSeparator } from './quick-input';
 import { AsyncLocalizationProvider } from '../common/i18n/localization';
 import { nls } from '../common/nls';
 import { CurrentWidgetCommandAdapter } from './shell/current-widget-command-adapter';
-import { ConfirmDialog, confirmExitWithOrWithoutSaving, Dialog } from './dialogs';
+import { ConfirmDialog, confirmExit, ConfirmSaveDialog, Dialog } from './dialogs';
 import { WindowService } from './window/window-service';
 import { FrontendApplicationConfigProvider } from './frontend-application-config-provider';
 import { DecorationStyle } from './decoration-style';
 import { isPinned, Title, togglePinned, Widget } from './widgets';
 import { SaveResourceService } from './save-resource-service';
 import { UserWorkingDirectoryProvider } from './user-working-directory-provider';
-import { UntitledResourceResolver } from '../common';
+import { UNTITLED_SCHEME, UntitledResourceResolver } from '../common';
 import { LanguageQuickPickService } from './i18n/language-quick-pick-service';
 
 export namespace CommonMenus {
 
     export const FILE = [...MAIN_MENU_BAR, '1_file'];
+    export const FILE_NEW_TEXT = [...FILE, '1_new_text'];
     export const FILE_NEW = [...FILE, '1_new'];
     export const FILE_OPEN = [...FILE, '2_open'];
     export const FILE_SAVE = [...FILE, '3_save'];
@@ -78,6 +80,8 @@ export namespace CommonMenus {
     export const FILE_SETTINGS_SUBMENU_OPEN = [...FILE_SETTINGS_SUBMENU, '1_settings_submenu_open'];
     export const FILE_SETTINGS_SUBMENU_THEME = [...FILE_SETTINGS_SUBMENU, '2_settings_submenu_theme'];
     export const FILE_CLOSE = [...FILE, '6_close'];
+
+    export const FILE_NEW_CONTRIBUTIONS = 'file/newFile';
 
     export const EDIT = [...MAIN_MENU_BAR, '2_edit'];
     export const EDIT_UNDO = [...EDIT, '1_undo'];
@@ -97,8 +101,10 @@ export namespace CommonMenus {
     export const VIEW_LAYOUT = [...VIEW, '3_layout'];
     export const VIEW_TOGGLE = [...VIEW, '4_toggle'];
 
-    export const SETTINGS_OPEN = [...SETTINGS_MENU, '1_settings_open'];
-    export const SETTINGS__THEME = [...SETTINGS_MENU, '2_settings_theme'];
+    export const MANAGE_GENERAL = [...MANAGE_MENU, '1_manage_general'];
+    export const MANAGE_SETTINGS = [...MANAGE_MENU, '2_manage_settings'];
+    export const MANAGE_SETTINGS_THEMES = [...MANAGE_SETTINGS, '1_manage_settings_themes'];
+
     // last menu item
     export const HELP = [...MAIN_MENU_BAR, '9_help'];
 
@@ -108,7 +114,9 @@ export namespace CommonCommands {
 
     export const FILE_CATEGORY = 'File';
     export const VIEW_CATEGORY = 'View';
+    export const CREATE_CATEGORY = 'Create';
     export const PREFERENCES_CATEGORY = 'Preferences';
+    export const MANAGE_CATEGORY = 'Manage';
     export const FILE_CATEGORY_KEY = nls.getDefaultKey(FILE_CATEGORY);
     export const VIEW_CATEGORY_KEY = nls.getDefaultKey(VIEW_CATEGORY);
     export const PREFERENCES_CATEGORY_KEY = nls.getDefaultKey(PREFERENCES_CATEGORY);
@@ -272,10 +280,24 @@ export namespace CommonCommands {
         category: VIEW_CATEGORY,
         label: 'Toggle Menu Bar'
     });
-    export const NEW_UNTITLED_FILE = Command.toDefaultLocalizedCommand({
-        id: 'workbench.action.files.newUntitledFile',
+    /**
+     * Command Parameters:
+     * - `fileName`: string
+     * - `directory`: URI
+     */
+    export const NEW_FILE = Command.toDefaultLocalizedCommand({
+        id: 'workbench.action.files.newFile',
+        category: FILE_CATEGORY
+    });
+    export const NEW_UNTITLED_TEXT_FILE = Command.toDefaultLocalizedCommand({
+        id: 'workbench.action.files.newUntitledTextFile',
         category: FILE_CATEGORY,
         label: 'New Untitled Text File'
+    });
+    export const NEW_UNTITLED_FILE = Command.toDefaultLocalizedCommand({
+        id: 'workbench.action.files.newUntitledFile',
+        category: CREATE_CATEGORY,
+        label: 'New File...'
     });
     export const SAVE = Command.toDefaultLocalizedCommand({
         id: 'core.save',
@@ -338,14 +360,18 @@ export namespace CommonCommands {
     });
 }
 
-export const supportCut = browser.isNative || document.queryCommandSupported('cut');
-export const supportCopy = browser.isNative || document.queryCommandSupported('copy');
+export const supportCut = environment.electron.is() || document.queryCommandSupported('cut');
+export const supportCopy = environment.electron.is() || document.queryCommandSupported('copy');
 // Chrome incorrectly returns true for document.queryCommandSupported('paste')
 // when the paste feature is available but the calling script has insufficient
 // privileges to actually perform the action
-export const supportPaste = browser.isNative || (!browser.isChrome && document.queryCommandSupported('paste'));
+export const supportPaste = environment.electron.is() || (!browser.isChrome && document.queryCommandSupported('paste'));
 
 export const RECENT_COMMANDS_STORAGE_KEY = 'commands';
+
+export const CLASSNAME_OS_MAC = 'mac';
+export const CLASSNAME_OS_WINDOWS = 'windows';
+export const CLASSNAME_OS_LINUX = 'linux';
 
 @injectable()
 export class CommonFrontendContribution implements FrontendApplicationContribution, MenuContribution, CommandContribution, KeybindingContribution, ColorContribution {
@@ -370,6 +396,9 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
 
     @inject(CommandRegistry)
     protected readonly commandRegistry: CommandRegistry;
+
+    @inject(MenuModelRegistry)
+    protected readonly menuRegistry: MenuModelRegistry;
 
     @inject(StorageService)
     protected readonly storageService: StorageService;
@@ -416,6 +445,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
     protected pinnedKey: ContextKey<boolean>;
 
     async configure(app: FrontendApplication): Promise<void> {
+        // FIXME: This request blocks valuable startup time (~200ms).
         const configDirUri = await this.environments.getConfigDirUri();
         // Global settings
         this.encodingRegistry.registerOverride({
@@ -435,6 +465,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
         this.initResourceContextKeys();
         this.registerCtrlWHandling();
 
+        this.setOsClass();
         this.updateStyles();
         this.preferences.ready.then(() => this.setSashProperties());
         this.preferences.onPreferenceChanged(e => this.handlePreferenceChange(e, app));
@@ -442,16 +473,16 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
         app.shell.leftPanelHandler.addBottomMenu({
             id: 'settings-menu',
             iconClass: 'codicon codicon-settings-gear',
-            title: nls.localizeByDefault(CommonCommands.PREFERENCES_CATEGORY),
-            menuPath: SETTINGS_MENU,
-            order: 0,
+            title: nls.localizeByDefault(CommonCommands.MANAGE_CATEGORY),
+            menuPath: MANAGE_MENU,
+            order: 1,
         });
         const accountsMenu = {
             id: 'accounts-menu',
             iconClass: 'codicon codicon-person',
             title: nls.localizeByDefault('Accounts'),
             menuPath: ACCOUNTS_MENU,
-            order: 1,
+            order: 0,
         };
         this.authenticationService.onDidRegisterAuthenticationProvider(() => {
             app.shell.leftPanelHandler.addBottomMenu(accountsMenu);
@@ -461,6 +492,16 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 app.shell.leftPanelHandler.removeBottomMenu(accountsMenu.id);
             }
         });
+    }
+
+    protected setOsClass(): void {
+        if (isOSX) {
+            document.body.classList.add(CLASSNAME_OS_MAC);
+        } else if (isWindows) {
+            document.body.classList.add(CLASSNAME_OS_WINDOWS);
+        } else {
+            document.body.classList.add(CLASSNAME_OS_LINUX);
+        }
     }
 
     protected updateStyles(): void {
@@ -544,6 +585,9 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
         registry.registerSubmenu(CommonMenus.EDIT, nls.localizeByDefault('Edit'));
         registry.registerSubmenu(CommonMenus.VIEW, nls.localizeByDefault('View'));
         registry.registerSubmenu(CommonMenus.HELP, nls.localizeByDefault('Help'));
+
+        // For plugins contributing create new file commands/menu-actions
+        registry.registerIndependentSubmenu(CommonMenus.FILE_NEW_CONTRIBUTIONS, nls.localizeByDefault('New File...'));
 
         registry.registerMenuAction(CommonMenus.FILE_SAVE, {
             commandId: CommonCommands.SAVE.id
@@ -684,19 +728,28 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             commandId: CommonCommands.SELECT_ICON_THEME.id
         });
 
-        registry.registerMenuAction(CommonMenus.SETTINGS__THEME, {
-            commandId: CommonCommands.SELECT_COLOR_THEME.id
+        registry.registerSubmenu(CommonMenus.MANAGE_SETTINGS_THEMES, nls.localizeByDefault('Themes'), { order: 'a50' });
+        registry.registerMenuAction(CommonMenus.MANAGE_SETTINGS_THEMES, {
+            commandId: CommonCommands.SELECT_COLOR_THEME.id,
+            order: '0'
         });
-        registry.registerMenuAction(CommonMenus.SETTINGS__THEME, {
-            commandId: CommonCommands.SELECT_ICON_THEME.id
+        registry.registerMenuAction(CommonMenus.MANAGE_SETTINGS_THEMES, {
+            commandId: CommonCommands.SELECT_ICON_THEME.id,
+            order: '1'
         });
 
         registry.registerSubmenu(CommonMenus.VIEW_APPEARANCE_SUBMENU, nls.localizeByDefault('Appearance'));
 
-        registry.registerMenuAction(CommonMenus.FILE_NEW, {
+        registry.registerMenuAction(CommonMenus.FILE_NEW_TEXT, {
+            commandId: CommonCommands.NEW_UNTITLED_TEXT_FILE.id,
+            label: nls.localizeByDefault('New Text File'),
+            order: 'a'
+        });
+
+        registry.registerMenuAction(CommonMenus.FILE_NEW_TEXT, {
             commandId: CommonCommands.NEW_UNTITLED_FILE.id,
             label: nls.localizeByDefault('New File...'),
-            order: 'a'
+            order: 'a1'
         });
     }
 
@@ -709,7 +762,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportCut) {
                     document.execCommand('cut');
                 } else {
-                    this.messageService.warn("Please use the browser's cut command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/cutWarn', "Please use the browser's cut command or shortcut."));
                 }
             }
         });
@@ -718,7 +771,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportCopy) {
                     document.execCommand('copy');
                 } else {
-                    this.messageService.warn("Please use the browser's copy command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/copyWarn', "Please use the browser's copy command or shortcut."));
                 }
             }
         });
@@ -727,7 +780,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 if (supportPaste) {
                     document.execCommand('paste');
                 } else {
-                    this.messageService.warn("Please use the browser's paste command or shortcut.");
+                    this.messageService.warn(nls.localize('theia/core/pasteWarn', "Please use the browser's paste command or shortcut."));
                 }
             }
         });
@@ -740,7 +793,7 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                     const text = uris.map(resource => resource.path.fsPath()).join(lineDelimiter);
                     await this.clipboardService.writeText(text);
                 } else {
-                    await this.messageService.info('Open a file first to copy its path');
+                    await this.messageService.info(nls.localize('theia/core/copyInfo', 'Open a file first to copy its path'));
                 }
             }
         }));
@@ -941,13 +994,17 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             execute: () => this.toggleBreadcrumbs(),
             isToggled: () => this.isBreadcrumbsEnabled(),
         });
-        commandRegistry.registerCommand(CommonCommands.NEW_UNTITLED_FILE, {
+        commandRegistry.registerCommand(CommonCommands.NEW_UNTITLED_TEXT_FILE, {
             execute: async () => {
                 const untitledUri = this.untitledResourceResolver.createUntitledURI('', await this.workingDirProvider.getUserWorkingDir());
                 this.untitledResourceResolver.resolve(untitledUri);
                 return open(this.openerService, untitledUri);
             }
         });
+        commandRegistry.registerCommand(CommonCommands.NEW_UNTITLED_FILE, {
+            execute: async () => this.showNewFilePicker()
+        });
+
         for (const [index, ordinal] of this.getOrdinalNumbers().entries()) {
             commandRegistry.registerCommand({ id: `workbench.action.focus${ordinal}EditorGroup`, label: index === 0 ? nls.localizeByDefault('Focus First Editor Group') : '', category: nls.localize(CommonCommands.VIEW_CATEGORY_KEY, CommonCommands.VIEW_CATEGORY) }, {
                 isEnabled: () => this.shell.mainAreaTabBars.length > index,
@@ -1097,8 +1154,12 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 when: 'activeEditorIsPinned'
             },
             {
-                command: CommonCommands.NEW_UNTITLED_FILE.id,
+                command: CommonCommands.NEW_UNTITLED_TEXT_FILE.id,
                 keybinding: this.isElectron() ? 'ctrlcmd+n' : 'alt+n',
+            },
+            {
+                command: CommonCommands.NEW_UNTITLED_FILE.id,
+                keybinding: 'ctrlcmd+alt+n'
             }
         );
         for (const [index, ordinal] of this.getOrdinalNumbers().entries()) {
@@ -1142,20 +1203,75 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
     }
 
     onWillStop(): OnWillStopAction | undefined {
-        try {
-            if (this.shouldPreventClose || this.shell.canSaveAll()) {
-                const captionsToSave = this.unsavedTabsCaptions();
+        if (this.shouldPreventClose || this.shell.canSaveAll()) {
+            return {
+                reason: 'Dirty editors present',
+                action: async () => {
+                    const captionsToSave = this.unsavedTabsCaptions();
+                    const untitledCaptionsToSave = this.unsavedUntitledTabsCaptions();
+                    const shouldExit = await this.confirmExitWithOrWithoutSaving(captionsToSave, async () => {
+                        await this.saveDirty(untitledCaptionsToSave);
+                        await this.shell.saveAll();
+                    });
+                    const allSavedOrDoNotSave = (
+                        shouldExit === true && untitledCaptionsToSave.length === 0 // Should save and cancel if any captions failed to save
+                    ) || shouldExit === false; // Do not save
 
-                return { reason: 'Dirty editors present', action: async () => confirmExitWithOrWithoutSaving(captionsToSave, async () => this.shell.saveAll()) };
-            }
-        } finally {
-            this.shouldPreventClose = false;
+                    this.shouldPreventClose = !allSavedOrDoNotSave;
+                    return allSavedOrDoNotSave;
+
+                }
+            };
         }
+    }
+    // Asks the user to confirm whether they want to exit with or without saving the changes
+    private async confirmExitWithOrWithoutSaving(captionsToSave: string[], performSave: () => Promise<void>): Promise<boolean | undefined> {
+        const div: HTMLElement = document.createElement('div');
+        div.innerText = nls.localizeByDefault("Your changes will be lost if you don't save them.");
+
+        let result;
+        if (captionsToSave.length > 0) {
+            const span = document.createElement('span');
+            span.appendChild(document.createElement('br'));
+            captionsToSave.forEach(cap => {
+                const b = document.createElement('b');
+                b.innerText = cap;
+                span.appendChild(b);
+                span.appendChild(document.createElement('br'));
+            });
+            span.appendChild(document.createElement('br'));
+            div.appendChild(span);
+            result = await new ConfirmSaveDialog({
+                title: nls.localizeByDefault('Do you want to save the changes to the following {0} files?', captionsToSave.length),
+                msg: div,
+                dontSave: nls.localizeByDefault("Don't Save"),
+                save: nls.localizeByDefault('Save All'),
+                cancel: Dialog.CANCEL
+            }).open();
+
+            if (result) {
+                await performSave();
+            }
+        } else {
+            // fallback if not passed with an empty caption-list.
+            result = confirmExit();
+        }
+        if (result !== undefined) {
+            return result === true;
+        } else {
+            return undefined;
+        };
+
     }
     protected unsavedTabsCaptions(): string[] {
         return this.shell.widgets
             .filter(widget => this.saveResourceService.canSave(widget))
             .map(widget => widget.title.label);
+    }
+    protected unsavedUntitledTabsCaptions(): Widget[] {
+        return this.shell.widgets.filter(widget =>
+            NavigatableWidget.getUri(widget)?.scheme === UNTITLED_SCHEME && this.saveResourceService.canSaveAs(widget)
+        );
     }
     protected async configureDisplayLanguage(): Promise<void> {
         const languageInfo = await this.languageQuickPickService.pickDisplayLanguage();
@@ -1167,7 +1283,22 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             this.windowService.reload();
         }
     }
-
+    /**
+     * saves any dirty widget in toSave
+     * side effect - will pop all widgets from toSave that was saved
+     * @param toSave
+     */
+    protected async saveDirty(toSave: Widget[]): Promise<void> {
+        for (const widget of toSave) {
+            const saveable = Saveable.get(widget);
+            if (saveable?.dirty) {
+                await this.saveResourceService.save(widget);
+                if (!this.saveResourceService.canSave(widget)) {
+                    toSave.pop();
+                }
+            }
+        }
+    }
     protected toggleBreadcrumbs(): void {
         const value: boolean | undefined = this.preferenceService.get('breadcrumbs.enabled');
         this.preferenceService.set('breadcrumbs.enabled', !value, PreferenceScope.User);
@@ -1292,6 +1423,77 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                     }
                 }
             });
+    }
+
+    /**
+     * @todo https://github.com/eclipse-theia/theia/issues/12824
+     */
+    protected async showNewFilePicker(): Promise<void> {
+        const newFileContributions = this.menuRegistry.getMenuNode(CommonMenus.FILE_NEW_CONTRIBUTIONS); // Add menus
+        const items: QuickPickItemOrSeparator[] = [
+            {
+                label: nls.localizeByDefault('New Text File'),
+                description: nls.localizeByDefault('Built-in'),
+                execute: async () => this.commandRegistry.executeCommand(CommonCommands.NEW_UNTITLED_TEXT_FILE.id)
+            },
+            ...newFileContributions.children
+                .flatMap(node => {
+                    if (node.children && node.children.length > 0) {
+                        return node.children;
+                    }
+                    return node;
+                })
+                .filter(node => node.role || node.command)
+                .map(node => {
+                    if (node.role) {
+                        return { type: 'separator' } as QuickPickSeparator;
+                    }
+                    const command = this.commandRegistry.getCommand(node.command!);
+                    return {
+                        label: command!.label!,
+                        execute: async () => this.commandRegistry.executeCommand(command!.id!)
+                    };
+
+                })
+        ];
+
+        const CREATE_NEW_FILE_ITEM_ID = 'create-new-file';
+        const hasNewFileHandler = this.commandRegistry.getActiveHandler(CommonCommands.NEW_FILE.id) !== undefined;
+        // Create a "Create New File" item only if there is a NEW_FILE command handler.
+        const createNewFileItem: QuickPickItem & { value?: string } | undefined = hasNewFileHandler ? {
+            id: CREATE_NEW_FILE_ITEM_ID,
+            label: nls.localizeByDefault('Create New File ({0})'),
+            description: nls.localizeByDefault('Built-in'),
+            execute: async () => {
+                if (createNewFileItem?.value) {
+                    const parent = await this.workingDirProvider.getUserWorkingDir();
+                    // Exec NEW_FILE command with the file name and parent dir as arguments
+                    return this.commandRegistry.executeCommand(CommonCommands.NEW_FILE.id, createNewFileItem.value, parent);
+                }
+            }
+        } : undefined;
+
+        this.quickInputService.showQuickPick(items, {
+            title: nls.localizeByDefault('New File...'),
+            placeholder: nls.localizeByDefault('Select File Type or Enter File Name...'),
+            canSelectMany: false,
+            onDidChangeValue: picker => {
+                if (createNewFileItem === undefined) {
+                    return;
+                }
+                // Dynamically show or hide the "Create New File" item based on the input value.
+                if (picker.value) {
+                    createNewFileItem.alwaysShow = true;
+                    createNewFileItem.value = picker.value;
+                    createNewFileItem.label = nls.localizeByDefault('Create New File ({0})', picker.value);
+                    picker.items = [...items, createNewFileItem];
+                } else {
+                    createNewFileItem.alwaysShow = false;
+                    createNewFileItem.value = undefined;
+                    picker.items = items.filter(item => item !== createNewFileItem);
+                }
+            }
+        });
     }
 
     registerColors(colors: ColorRegistry): void {
@@ -2201,6 +2403,24 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                     hcDark: Color.lighten('statusBar.offlineBackground', 0.6),
                     hcLight: Color.lighten('statusBar.offlineBackground', 0.6)
                 }, description: 'Background of active statusbar item in case the theia server is offline.'
+            },
+            {
+                id: 'statusBarItem.remoteBackground',
+                defaults: {
+                    dark: 'activityBarBadge.background',
+                    light: 'activityBarBadge.background',
+                    hcDark: 'activityBarBadge.background',
+                    hcLight: 'activityBarBadge.background'
+                }, description: 'Background color for the remote indicator on the status bar.'
+            },
+            {
+                id: 'statusBarItem.remoteForeground',
+                defaults: {
+                    dark: 'activityBarBadge.foreground',
+                    light: 'activityBarBadge.foreground',
+                    hcDark: 'activityBarBadge.foreground',
+                    hcLight: 'activityBarBadge.foreground'
+                }, description: 'Foreground color for the remote indicator on the status bar.'
             },
             // Buttons
             {

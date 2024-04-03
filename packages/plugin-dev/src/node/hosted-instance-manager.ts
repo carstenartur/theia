@@ -24,12 +24,13 @@ import URI from '@theia/core/lib/common/uri';
 import { ContributionProvider } from '@theia/core/lib/common/contribution-provider';
 import { HostedPluginUriPostProcessor, HostedPluginUriPostProcessorSymbolName } from './hosted-plugin-uri-postprocessor';
 import { environment, isWindows } from '@theia/core';
-import { FileUri } from '@theia/core/lib/node/file-uri';
+import { FileUri } from '@theia/core/lib/common/file-uri';
 import { LogType } from '@theia/plugin-ext/lib/common/types';
 import { HostedPluginSupport } from '@theia/plugin-ext/lib/hosted/node/hosted-plugin';
 import { MetadataScanner } from '@theia/plugin-ext/lib/hosted/node/metadata-scanner';
 import { PluginDebugConfiguration } from '../common/plugin-dev-protocol';
 import { HostedPluginProcess } from '@theia/plugin-ext/lib/hosted/node/hosted-plugin-process';
+import { isENOENT } from '@theia/plugin-ext/lib/common/errors';
 
 const DEFAULT_HOSTED_PLUGIN_PORT = 3030;
 
@@ -84,7 +85,7 @@ export interface HostedInstanceManager {
      *
      * @param uri uri to the plugin source location
      */
-    isPluginValid(uri: URI): boolean;
+    isPluginValid(uri: URI): Promise<boolean>;
 }
 
 const HOSTED_INSTANCE_START_TIMEOUT_MS = 30000;
@@ -224,19 +225,18 @@ export abstract class AbstractHostedInstanceManager implements HostedInstanceMan
         }
     }
 
-    isPluginValid(uri: URI): boolean {
+    async isPluginValid(uri: URI): Promise<boolean> {
         const pckPath = path.join(FileUri.fsPath(uri), 'package.json');
-        if (fs.existsSync(pckPath)) {
-            const pck = fs.readJSONSync(pckPath);
-            try {
-                this.metadata.getScanner(pck);
-                return true;
-            } catch (e) {
-                console.error(e);
-                return false;
+        try {
+            const pck = await fs.readJSON(pckPath);
+            this.metadata.getScanner(pck);
+            return true;
+        } catch (err) {
+            if (!isENOENT(err)) {
+                console.error(err);
             }
+            return false;
         }
-        return false;
     }
 
     protected async getStartCommand(port?: number, debugConfig?: PluginDebugConfiguration): Promise<string[]> {

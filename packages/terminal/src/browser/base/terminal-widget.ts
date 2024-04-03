@@ -20,6 +20,7 @@ import { CommandLineOptions } from '@theia/process/lib/common/shell-command-buil
 import { TerminalSearchWidget } from '../search/terminal-search-widget';
 import { TerminalProcessInfo, TerminalExitReason } from '../../common/base-terminal-protocol';
 import URI from '@theia/core/lib/common/uri';
+import { MarkdownString } from '@theia/core/lib/common/markdown-rendering/markdown-string';
 
 export interface TerminalDimensions {
     cols: number;
@@ -47,6 +48,15 @@ export interface TerminalSplitLocation {
     readonly parentTerminal: string;
 }
 
+export interface TerminalBuffer {
+    readonly length: number;
+    /**
+     * @param start zero based index of the first line to return
+     * @param length the max number or lines to return
+     */
+    getLines(start: number, length: number): string[];
+}
+
 /**
  * Terminal UI widget.
  */
@@ -57,6 +67,9 @@ export abstract class TerminalWidget extends BaseWidget {
      * Get the current executable and arguments.
      */
     abstract processInfo: Promise<TerminalProcessInfo>;
+
+    /** The ids of extensions contributing to the environment of this terminal mapped to the provided description for their changes. */
+    abstract envVarCollectionDescriptionsByExtension: Promise<Map<string, (string | MarkdownString | undefined)[]>>;
 
     /** Terminal kind that indicates whether a terminal is created by a user or by some extension for a user */
     abstract readonly kind: 'user' | string;
@@ -113,6 +126,10 @@ export abstract class TerminalWidget extends BaseWidget {
 
     /** Event that fires when the terminal input data */
     abstract onData: Event<string>;
+
+    abstract onOutput: Event<string>;
+
+    abstract buffer: TerminalBuffer;
 
     abstract scrollLineUp(): void;
 

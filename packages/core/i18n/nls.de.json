@@ -1,5 +1,9 @@
 {
   "debug.breakpoint.editCondition": "Edit Bedingung...",
+  "notebook.cell.insertMarkdownCellAbove": "Markdown-Zelle oben einfügen",
+  "notebook.cell.insertMarkdownCellBelow": "Markdown-Zelle unten einfügen",
+  "notebook.cell.to-code-cell": "Zelle in Code ändern",
+  "notebook.cell.to-markdown-cell": "Zelle in Mardown ändern",
   "terminal:new:profile": "Neues integriertes Terminal aus einem Profil erstellen",
   "terminal:profile:default": "Wählen Sie das Standard-Terminalprofil",
   "theia": {
@@ -30,7 +34,14 @@
         "showPreviousTabInGroup": "Zur vorherigen Registerkarte in der Gruppe wechseln",
         "toggleMaximized": "Maximiert umschalten"
       },
-      "enhancedPreview": "Steuert, ob weitere Informationen über die Registerkarte in horizontalen Registerkartenleisten angezeigt werden sollen.",
+      "copyInfo": "Öffnen Sie zuerst eine Datei, um ihren Pfad zu kopieren",
+      "copyWarn": "Bitte verwenden Sie den Kopierbefehl des Browsers oder eine Tastenkombination.",
+      "cutWarn": "Bitte verwenden Sie den Ausschneidebefehl des Browsers oder eine Tastenkombination.",
+      "enhancedPreview": {
+        "classic": "Zeigt eine einfache Vorschau der Registerkarte mit grundlegenden Informationen an.",
+        "enhanced": "Anzeige einer erweiterten Vorschau der Registerkarte mit zusätzlichen Informationen.",
+        "visual": "Zeigen Sie eine visuelle Vorschau der Registerkarte an."
+      },
       "file": {
         "browse": "Durchsuchen"
       },
@@ -50,12 +61,20 @@
         "clipboardWarnFirefox": "Die Zwischenablage-API ist nicht verfügbar. Sie kann durch die Einstellung '{0}' auf der Seite '{1}' aktiviert werden. Dann laden Sie Theia neu. Beachten Sie, dass FireFox dadurch vollen Zugriff auf die Zwischenablage des Systems erhält."
       },
       "offline": "Offline",
+      "pasteWarn": "Bitte verwenden Sie den Einfügebefehl des Browsers oder eine Tastenkombination.",
       "quitMessage": "Alle nicht gespeicherten Änderungen werden nicht gespeichert.",
       "resetWorkbenchLayout": "Workbench-Layout zurücksetzen",
       "searchbox": {
         "close": "Schließen (Escape)",
         "next": "Nächste (Unten)",
         "previous": "Zurück (Oben)"
+      },
+      "secondaryWindow": {
+        "alwaysOnTop": "Wenn diese Funktion aktiviert ist, bleibt das sekundäre Fenster über allen anderen Fenstern, auch über denen anderer Anwendungen.",
+        "description": "Legt die Anfangsposition und -größe des extrahierten Sekundärfensters fest.",
+        "fullSize": "Die Position und Größe des extrahierten Widgets entspricht der der laufenden Theia-Anwendung.",
+        "halfWidth": "Die Position und Größe des extrahierten Widgets entspricht der halben Breite der laufenden Theia-Anwendung.",
+        "originalSize": "Position und Größe des extrahierten Widgets entsprechen denen des ursprünglichen Widgets."
       },
       "silentNotifications": "Legt fest, ob Benachrichtigungs-Popups unterdrückt werden sollen.",
       "tabDefaultSize": "Gibt die Standardgröße für Registerkarten an.",
@@ -65,25 +84,47 @@
     },
     "debug": {
       "addConfigurationPlaceholder": "Wählen Sie das Stammverzeichnis des Arbeitsbereichs, dem Sie die Konfiguration hinzufügen möchten",
+      "breakpoint": "Haltepunkt",
       "compound-cycle": "Startkonfiguration '{0}' enthält einen Zyklus mit sich selbst",
       "continueAll": "Alle fortsetzen",
       "copyExpressionValue": "Ausdruckswert kopieren",
+      "dataBreakpoint": "Daten-Haltepunkt",
       "debugVariableInput": "{0} Wert einstellen",
+      "entry": "Eintrag",
+      "exception": "Ausnahme",
+      "functionBreakpoint": "Funktionsunterbrechungspunkt",
+      "goto": "siehe",
       "instruction-breakpoint": "Anweisung Haltepunkt",
+      "instructionBreakpoint": "Befehlshaltepunkt",
       "missingConfiguration": "Die dynamische Konfiguration '{0}:{1}' fehlt oder ist nicht anwendbar",
+      "pause": "Pause",
       "pauseAll": "Pause Alle",
       "reveal": "Enthüllen",
+      "step": "Schritt",
       "threads": "Threads",
       "toggleTracing": "Aktivieren/Deaktivieren der Verfolgung der Kommunikation mit Debug-Adaptern"
     },
     "editor": {
+      "diffEditor.wordWrap2": "Der Zeilenumbruch erfolgt entsprechend der Einstellung `#editor.wordWrap#`.",
       "dirtyEncoding": "Die Datei ist verschmutzt. Bitte speichern Sie sie zuerst, bevor Sie sie mit einer anderen Kodierung erneut öffnen.",
-      "editor.codeActionWidget.showHeaders": "Aktivieren/deaktivieren Sie die Anzeige von Gruppenkopfzeilen im Code-Aktionsmenü.",
+      "editor.accessibilitySupport0": "Plattform-APIs verwenden, um zu erkennen, ob ein Screen Reader angeschlossen ist",
+      "editor.accessibilitySupport1": "Optimieren für die Nutzung mit einem Screen Reader",
+      "editor.accessibilitySupport2": "Angenommen, ein Bildschirmlesegerät ist nicht angeschlossen",
+      "editor.bracketPairColorization.enabled": "Steuert, ob die Einfärbung von Klammerpaaren aktiviert ist oder nicht. Verwenden Sie `#workbench.colorCustomizations#`, um die Farben der Klammerhervorhebung zu überschreiben.",
+      "editor.codeActionWidget.includeNearbyQuickfixes": "Aktivieren/Deaktivieren der Anzeige des nächstgelegenen Quickfix innerhalb einer Zeile, wenn keine Diagnose durchgeführt wird.",
+      "editor.detectIndentation": "Steuert, ob `#editor.tabSize#` und `#editor.insertSpaces#` automatisch erkannt werden, wenn eine Datei geöffnet wird, basierend auf dem Inhalt der Datei.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Es wird versucht, nur Änderungen zu formatieren (erfordert Quellensicherung). Wenn die Versionskontrolle nicht verwendet werden kann, wird die gesamte Datei formatiert.",
+      "editor.hover.hidingDelay": "Steuert die Verzögerung in Millisekunden, nach der der Hover ausgeblendet wird. Erfordert, dass `editor.hover.sticky` aktiviert ist.",
       "editor.inlayHints.enabled1": "Inlay-Hinweise werden standardmäßig angezeigt und bei gedrückter Tastenkombination \"Strg+Alt\" ausgeblendet",
       "editor.inlayHints.enabled2": "Inlay-Hinweise sind standardmäßig ausgeblendet und werden angezeigt, wenn die Tastenkombination \"Strg+Alt\" gedrückt wird.",
+      "editor.inlayHints.fontFamily": "Steuert die Schriftfamilie der Inlay-Hinweise im Editor. Wenn leer, wird die `#editor.fontFamily#` verwendet.",
+      "editor.inlayHints.fontSize": "Steuert die Schriftgröße der Inlay-Hinweise im Editor. Als Vorgabe wird die `#editor.fontSize#` verwendet, wenn der konfigurierte Wert kleiner als `5` oder größer als die Editor-Schriftgröße ist.",
+      "editor.insertSpaces": "Leerzeichen einfügen, wenn `Tab` gedrückt wird. Diese Einstellung wird auf der Grundlage des Dateiinhalts außer Kraft gesetzt, wenn `#editor.detectIndentation#` eingeschaltet ist.",
       "editor.quickSuggestions": "Legt fest, ob während der Eingabe automatisch Vorschläge angezeigt werden sollen. Dies kann für die Eingabe von Kommentaren, Strings und anderem Code gesteuert werden. Schnellvorschläge können so konfiguriert werden, dass sie als Ghosttext oder mit dem Suggest-Widget angezeigt werden. Beachten Sie auch die '#editor.suggestOnTriggerCharacters#'-Einstellung, die steuert, ob Vorschläge durch Sonderzeichen ausgelöst werden.",
-      "editor.suggest.matchOnWordStartOnly": "Wenn die IntelliSense-Filterung aktiviert ist, muss das erste Zeichen am Wortanfang übereinstimmen, z. B. \"c\" bei \"Konsole\" oder \"Webkontext\", aber _nicht_ bei \"Beschreibung\". Wenn IntelliSense deaktiviert ist, werden mehr Ergebnisse angezeigt, aber immer noch nach der Qualität der Übereinstimmung sortiert.",
+      "editor.stickyScroll.scrollWithEditor": "Aktivieren Sie den Bildlauf des Sticky-Scroll-Widgets mit der horizontalen Bildlaufleiste des Editors.",
+      "editor.suggestFontSize": "Schriftgröße für das Vorschlags-Widget. Wenn auf `0` gesetzt, wird der Wert von `#editor.fontSize#` verwendet.",
+      "editor.suggestLineHeight": "Zeilenhöhe für das Vorschlags-Widget. Wenn auf `0` gesetzt, wird der Wert von `#editor.lineHeight#` verwendet. Der Mindestwert ist 8.",
+      "editor.tabSize": "Die Anzahl der Leerzeichen, die ein Tabulator ausmacht. Diese Einstellung wird basierend auf dem Inhalt der Datei überschrieben, wenn `#editor.detectIndentation#` eingeschaltet ist.",
       "files.autoSave": "Steuert das [automatische Speichern](https://code.visualstudio.com/docs/editor/codebasics#_save-auto-save) von Editoren, die ungespeicherte Änderungen haben.",
       "files.autoSave.afterDelay": "Ein Editor mit Änderungen wird automatisch nach der konfigurierten `#files.autoSaveDelay#` gespeichert.",
       "files.autoSave.off": "Ein Editor mit Änderungen wird nie automatisch gespeichert.",
@@ -108,6 +149,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Kopieren Sie den Download-Link in die Zwischenablage.",
       "copyDownloadLink": "Download-Link kopieren",
       "dialog": {
         "initialLocation": "Zum Ausgangsort gehen",
@@ -137,12 +179,15 @@
     "getting-started": {
       "apiComparator": "{0} API-Kompatibilität",
       "newExtension": "Bau einer neuen Erweiterung",
-      "newPlugin": "Ein neues Plugin erstellen"
+      "newPlugin": "Ein neues Plugin erstellen",
+      "startup-editor": {
+        "welcomePage": "Öffnen Sie die Willkommensseite mit Inhalten, die Ihnen den Einstieg in die Arbeit mit {0} und den Erweiterungen erleichtern."
+      }
     },
     "git": {
       "aFewSecondsAgo": "vor ein paar Sekunden",
       "addSignedOff": "Abgezeichnet von hinzufügen",
-      "amendReuseMessag": "Um die letzte Meldung wieder zu verwenden, drücken Sie \"Enter\" oder \"Escape\", um den Vorgang abzubrechen.",
+      "amendReuseMessage": "Um die letzte Meldung wieder zu verwenden, drücken Sie \"Enter\" oder \"Escape\", um den Vorgang abzubrechen.",
       "amendRewrite": "Vorherige Übermittlungsnachricht neu schreiben. Bestätigen Sie mit \"Enter\" oder brechen Sie mit \"Escape\" ab.",
       "checkoutCreateLocalBranchWithName": "Erstellen Sie einen neuen lokalen Zweig mit dem Namen: {0}. Drücken Sie \"Enter\" zur Bestätigung oder \"Escape\" zum Abbrechen.",
       "checkoutProvideBranchName": "Bitte geben Sie den Namen einer Zweigstelle an.",
@@ -174,7 +219,18 @@
       "deprecation": "Verwenden Sie stattdessen die `when`-Klausel."
     },
     "keymaps": {
+      "addKeybindingTitle": "Tastenbelegung hinzufügen für {0}",
+      "editKeybinding": "Tastaturbelegung bearbeiten...",
       "editKeybindingTitle": "Tastaturbelegung für {0} bearbeiten",
+      "editWhenExpression": "Bearbeiten Wenn Ausdruck...",
+      "editWhenExpressionTitle": "Bearbeiten Wenn Ausdruck für {0}",
+      "keybinding": {
+        "copy": "Tastaturbelegung kopieren",
+        "copyCommandId": "Kopieren der Tastaturbelegung Befehls-ID",
+        "copyCommandTitle": "Tastaturbelegung kopieren Befehl Titel",
+        "edit": "Tastaturbelegung bearbeiten...",
+        "editWhenExpression": "Tastenkombinationen bearbeiten, wenn der Ausdruck..."
+      },
       "keybindingCollidesValidation": "Tastenkombinationen kollidieren",
       "requiredKeybindingValidation": "Schlüsselbindung Wert ist erforderlich",
       "resetKeybindingConfirmation": "Möchten Sie diese Tastaturbelegung wirklich auf den Standardwert zurücksetzen?",
@@ -216,6 +272,7 @@
         "offset-title": "Bytes zum Versetzen des Speichers von {0}"
       },
       "editable": {
+        "apply": "Änderungen anwenden",
         "clear": "Deutliche Änderungen"
       },
       "endianness": "Endianness",
@@ -279,6 +336,7 @@
       "autoReveal": "Auto-Enthüllung",
       "clipboardWarn": "Der Zugriff auf die Zwischenablage wird verweigert. Überprüfen Sie die Berechtigung Ihres Browsers.",
       "clipboardWarnFirefox": "Die Zwischenablage-API ist nicht verfügbar. Sie kann durch die Einstellung '{0}' auf der Seite '{1}' aktiviert werden. Dann laden Sie Theia neu. Beachten Sie, dass FireFox dadurch vollen Zugriff auf die Systemzwischenablage erhält.",
+      "noFolderOpened": "Kein Ordner geöffnet",
       "refresh": "Aktualisieren im Explorer",
       "reveal": "Enthüllen im Explorer",
       "toggleHiddenFiles": "Versteckte Dateien umschalten"
@@ -323,6 +381,9 @@
       "watchMode": "Watcher auf Plugin in Entwicklung ausführen"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Anmeldung"
+      },
       "plugins": "Plugins",
       "webviewTrace": "Steuert die Kommunikationsverfolgung mit Webviews.",
       "webviewWarnIfUnsecure": "Warnt Benutzer, dass Webviews derzeit unsicher eingesetzt werden."
@@ -364,8 +425,7 @@
       "extract-widget": "Ansicht in sekundäres Fenster verschieben"
     },
     "shell-area": {
-      "secondary": "Sekundäres Fenster",
-      "top": "Top"
+      "secondary": "Sekundäres Fenster"
     },
     "task": {
       "attachTask": "Aufgabe anhängen...",
@@ -385,6 +445,7 @@
       "profilePath": "Der Pfad der Shell, den dieses Profil benutzt.",
       "profiles": "Die Profile welche zur Erzeugung eines Terminals verwendet werden können. Setzen Sie den Pfad von Hand mit optionalen Parametern.\n\nSezen Sie ein Profile auf `null` um es zu verbergen, z.B.: `{0}: null`.",
       "rendererType": "Steuert, wie das Terminal gerendert wird.",
+      "rendererTypeDeprecationMessage": "Der Renderer-Typ wird nicht mehr als Option unterstützt.",
       "selectProfile": "Wählen Sie ein Profil für das neue Terminal",
       "shell.deprecated": "Dies ist veraltet, neu können Sie Ihre Shell konfigurieren, indem Sie ein Profil unter 'terminal.integrated.profiles.{0}' anlegen und dessen Namen in 'terminal.integrated.defaultProfile.{0}' als Standard setzen.",
       "shellArgsLinux": "Die Befehlszeilenargumente, die im Linux-Terminal zu verwenden sind.",
@@ -393,6 +454,11 @@
       "shellLinux": "Der Pfad der Shell, die das Terminal unter Linux verwendet (Standard: '{0}'}).",
       "shellOsx": "Der Pfad der Shell, die das Terminal unter macOS verwendet (Standard: '{0}'}).",
       "shellWindows": "Der Pfad der Shell, die das Terminal unter Windows verwendet. (Standard: '{0}')."
+    },
+    "test": {
+      "cancelAllTestRuns": "Alle Testläufe abbrechen",
+      "testRunDefaultName": "{0} laufen. {1}",
+      "testRuns": "Testläufe"
     },
     "toolbar": {
       "addCommand": "Befehl zur Symbolleiste hinzufügen",
@@ -419,11 +485,16 @@
       "supertypeHierarchy": "Supertyp-Hierarchie"
     },
     "vsx-registry": {
+      "confirmDialogMessage": "Die Erweiterung \"{0}\" ist ungeprüft und könnte ein Sicherheitsrisiko darstellen.",
+      "confirmDialogTitle": "Sind Sie sicher, dass Sie mit der Installation fortfahren wollen?",
       "downloadCount": "Anzahl der Downloads: {0}",
       "errorFetching": "Fehler beim Abrufen von Erweiterungen.",
+      "errorFetchingConfigurationHint": "Dies könnte auf Probleme bei der Netzwerkkonfiguration zurückzuführen sein.",
       "failedInstallingVSIX": "Die Installation von {0} aus VSIX ist fehlgeschlagen.",
       "invalidVSIX": "Die ausgewählte Datei ist kein gültiges \"*.vsix\"-Plugin.",
       "license": "Lizenz: {0}",
+      "onlyShowVerifiedExtensionsDescription": "Auf diese Weise kann {0} nur verifizierte Durchwahlen anzeigen.",
+      "onlyShowVerifiedExtensionsTitle": "Nur geprüfte Erweiterungen anzeigen",
       "recommendedExtensions": "Eine Liste mit den Namen der Erweiterungen, die für die Verwendung in diesem Arbeitsbereich empfohlen werden.",
       "searchPlaceholder": "Erweiterungen suchen in {0}",
       "showInstalled": "Installierte Erweiterungen anzeigen",
