@@ -76,6 +76,13 @@ export class HostedPluginDeployerHandler implements PluginDeployerHandler {
         return Array.from(this.deployedBackendPlugins.keys());
     }
 
+    async getDeployedBackendPlugins(): Promise<DeployedPlugin[]> {
+        // await first deploy
+        await this.backendPluginsMetadataDeferred.promise;
+        // fetch the last deployed state
+        return Array.from(this.deployedBackendPlugins.values());
+    }
+
     getDeployedPluginsById(pluginId: string): DeployedPlugin[] {
         const matches: DeployedPlugin[] = [];
         const handle = (plugins: Iterable<DeployedPlugin>): void => {
@@ -173,7 +180,7 @@ export class HostedPluginDeployerHandler implements PluginDeployerHandler {
 
             const { type } = entry;
             const deployed: DeployedPlugin = { metadata, type };
-            deployed.contributes = this.reader.readContribution(manifest);
+            deployed.contributes = await this.reader.readContribution(manifest);
             await this.localizationService.deployLocalizations(deployed);
             deployedPlugins.set(id, deployed);
             deployPlugin.debug(`Deployed ${entryPoint} plugin "${id}" from "${metadata.model.entryPoint[entryPoint] || pluginPath}"`);
@@ -253,8 +260,8 @@ export class HostedPluginDeployerHandler implements PluginDeployerHandler {
         const knownLocations = this.sourceLocations.get(id) ?? new Set();
         const maybeStoredLocations = entry.getValue('sourceLocations');
         const storedLocations = Array.isArray(maybeStoredLocations) && maybeStoredLocations.every(location => typeof location === 'string')
-            ? maybeStoredLocations.concat(entry.originalPath())
-            : [entry.originalPath()];
+            ? maybeStoredLocations.concat(entry.rootPath)
+            : [entry.rootPath];
         storedLocations.forEach(location => knownLocations.add(location));
         this.sourceLocations.set(id, knownLocations);
     }

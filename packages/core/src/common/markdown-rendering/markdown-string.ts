@@ -19,9 +19,13 @@ import { UriComponents } from '../uri';
 import { escapeIcons } from './icon-utilities';
 import { isObject, isString } from '../types';
 
+export interface MarkdownStringTrustedOptions {
+    readonly enabledCommands: readonly string[];
+}
+
 export interface MarkdownString {
     readonly value: string;
-    readonly isTrusted?: boolean;
+    readonly isTrusted?: boolean | MarkdownStringTrustedOptions;
     readonly supportThemeIcons?: boolean;
     readonly supportHtml?: boolean;
     readonly baseUri?: UriComponents;
@@ -45,9 +49,8 @@ export namespace MarkdownString {
 // Copied from https://github.com/microsoft/vscode/blob/7d9b1c37f8e5ae3772782ba3b09d827eb3fdd833/src/vs/base/common/htmlContent.ts
 
 export class MarkdownStringImpl implements MarkdownString {
-
     public value: string;
-    public isTrusted?: boolean;
+    public isTrusted?: boolean | MarkdownStringTrustedOptions;
     public supportThemeIcons?: boolean;
     public supportHtml?: boolean;
     public baseUri?: UriComponents;
@@ -122,4 +125,28 @@ export class MarkdownStringImpl implements MarkdownString {
 export function escapeMarkdownSyntaxTokens(text: string): string {
     // escape markdown syntax tokens: http://daringfireball.net/projects/markdown/syntax#backslash
     return text.replace(/[\\`*_{}[\]()#+\-!]/g, '\\$&');
+}
+
+// Copied from https://github.com/microsoft/vscode/blob/1.72.2/src/vs/base/common/htmlContent.ts
+
+export function parseHrefAndDimensions(href: string): { href: string; dimensions: string[] } {
+    const dimensions: string[] = [];
+    const splitted = href.split('|').map(s => s.trim());
+    href = splitted[0];
+    const parameters = splitted[1];
+    if (parameters) {
+        const heightFromParams = /height=(\d+)/.exec(parameters);
+        const widthFromParams = /width=(\d+)/.exec(parameters);
+        const height = heightFromParams ? heightFromParams[1] : '';
+        const width = widthFromParams ? widthFromParams[1] : '';
+        const widthIsFinite = isFinite(parseInt(width));
+        const heightIsFinite = isFinite(parseInt(height));
+        if (widthIsFinite) {
+            dimensions.push(`width="${width}"`);
+        }
+        if (heightIsFinite) {
+            dimensions.push(`height="${height}"`);
+        }
+    }
+    return { href, dimensions };
 }

@@ -27,6 +27,7 @@ import { LabelProvider } from '@theia/core/lib/browser/label-provider';
 import { GENERAL_MAX_FILE_SIZE_MB } from './filesystem-preferences';
 import { FrontendApplicationStateService } from '@theia/core/lib/browser/frontend-application-state';
 import { nls } from '@theia/core';
+import { MarkdownString } from '@theia/core/lib/common/markdown-rendering';
 
 export interface FileResourceVersion extends ResourceVersion {
     readonly encoding: string;
@@ -40,7 +41,7 @@ export namespace FileResourceVersion {
 }
 
 export interface FileResourceOptions {
-    isReadonly: boolean
+    readOnly: boolean | MarkdownString
     shouldOverwrite: () => Promise<boolean>
     shouldOpenAsText: (error: string) => Promise<boolean>
 }
@@ -54,6 +55,9 @@ export class FileResource implements Resource {
     protected readonly onDidChangeContentsEmitter = new Emitter<void>();
     readonly onDidChangeContents: Event<void> = this.onDidChangeContentsEmitter.event;
 
+    protected readonly onDidChangeReadOnlyEmitter = new Emitter<boolean | MarkdownString>();
+    readonly onDidChangeReadOnly: Event<boolean | MarkdownString> = this.onDidChangeReadOnlyEmitter.event;
+
     protected _version: FileResourceVersion | undefined;
     get version(): FileResourceVersion | undefined {
         return this._version;
@@ -61,8 +65,8 @@ export class FileResource implements Resource {
     get encoding(): string | undefined {
         return this._version?.encoding;
     }
-    get isReadonly(): boolean {
-        return this.options.isReadonly || this.fileService.hasCapability(this.uri, FileSystemProviderCapabilities.Readonly);
+    get readOnly(): boolean | MarkdownString {
+        return this.options.readOnly;
     }
 
     constructor(
@@ -71,6 +75,7 @@ export class FileResource implements Resource {
         protected readonly options: FileResourceOptions
     ) {
         this.toDispose.push(this.onDidChangeContentsEmitter);
+        this.toDispose.push(this.onDidChangeReadOnlyEmitter);
         this.toDispose.push(this.fileService.onDidFilesChange(event => {
             if (event.contains(this.uri)) {
                 this.sync();
@@ -87,11 +92,30 @@ export class FileResource implements Resource {
             console.error(e);
         }
         this.updateSavingContentChanges();
-        this.toDispose.push(this.fileService.onDidChangeFileSystemProviderCapabilities(e => {
+        this.toDispose.push(this.fileService.onDidChangeFileSystemProviderCapabilities(async e => {
             if (e.scheme === this.uri.scheme) {
-                this.updateSavingContentChanges();
+                this.updateReadOnly();
             }
         }));
+        this.fileService.onDidChangeFileSystemProviderReadOnlyMessage(async e => {
+            if (e.scheme === this.uri.scheme) {
+                this.updateReadOnly();
+            }
+        });
+    }
+
+    protected async updateReadOnly(): Promise<void> {
+        const oldReadOnly = this.options.readOnly;
+        const readOnlyMessage = this.fileService.getReadOnlyMessage(this.uri);
+        if (readOnlyMessage) {
+            this.options.readOnly = readOnlyMessage;
+        } else {
+            this.options.readOnly = this.fileService.hasCapability(this.uri, FileSystemProviderCapabilities.Readonly);
+        }
+        if (this.options.readOnly !== oldReadOnly) {
+            this.updateSavingContentChanges();
+            this.onDidChangeReadOnlyEmitter.fire(this.options.readOnly);
+        }
     }
 
     dispose(): void {
@@ -220,7 +244,7 @@ export class FileResource implements Resource {
     saveContents?: Resource['saveContents'];
     saveContentChanges?: Resource['saveContentChanges'];
     protected updateSavingContentChanges(): void {
-        if (this.isReadonly) {
+        if (this.readOnly) {
             delete this.saveContentChanges;
             delete this.saveContents;
             delete this.saveStream;
@@ -320,8 +344,13 @@ export class FileResourceResolver implements ResourceResolver {
         if (stat && stat.isDirectory) {
             throw new Error('The given uri is a directory: ' + this.labelProvider.getLongName(uri));
         }
+
+        const readOnlyMessage = this.fileService.getReadOnlyMessage(uri);
+        const isFileSystemReadOnly = this.fileService.hasCapability(uri, FileSystemProviderCapabilities.Readonly);
+        const readOnly = readOnlyMessage ?? (isFileSystemReadOnly ? isFileSystemReadOnly : (stat?.isReadonly ?? false));
+
         return new FileResource(uri, this.fileService, {
-            isReadonly: stat?.isReadonly ?? false,
+            readOnly: readOnly,
             shouldOverwrite: () => this.shouldOverwrite(uri),
             shouldOpenAsText: error => this.shouldOpenAsText(uri, error)
         });

@@ -32,6 +32,7 @@ import {
     LanguagesExt,
     WorkspaceEditDto,
     WorkspaceTextEditDto,
+    WorkspaceFileEditDto,
     PluginInfo,
     LanguageStatus as LanguageStatusDTO,
     InlayHintDto,
@@ -40,7 +41,8 @@ import {
 import { injectable, inject } from '@theia/core/shared/inversify';
 import {
     SerializedDocumentFilter, MarkerData, Range, RelatedInformation,
-    MarkerSeverity, DocumentLink, WorkspaceSymbolParams, CodeAction, CompletionDto, CodeActionProviderDocumentation, InlayHint, InlayHintLabelPart, CodeActionContext
+    MarkerSeverity, DocumentLink, WorkspaceSymbolParams, CodeAction, CompletionDto,
+    CodeActionProviderDocumentation, InlayHint, InlayHintLabelPart, CodeActionContext, DocumentDropEditProviderMetadata, SignatureHelpContext
 } from '../../common/plugin-api-rpc-model';
 import { RPCProtocol } from '../../common/rpc-protocol';
 import { MonacoLanguages, WorkspaceSymbolProvider } from '@theia/monaco/lib/browser/monaco-languages';
@@ -82,7 +84,7 @@ import {
 import { ITextModel } from '@theia/monaco-editor-core/esm/vs/editor/common/model';
 import { CodeActionTriggerKind, SnippetString } from '../../plugin/types-impl';
 import { DataTransfer } from './data-transfer/data-transfer-type-converters';
-import { VSDataTransfer } from '@theia/monaco-editor-core/esm/vs/base/common/dataTransfer';
+import { IReadonlyVSDataTransfer } from '@theia/monaco-editor-core/esm/vs/base/common/dataTransfer';
 import { FileUploadService } from '@theia/filesystem/lib/browser/file-upload-service';
 
 /**
@@ -165,6 +167,7 @@ export class LanguagesMainImpl implements LanguagesMain, Disposable {
             wordPattern: reviveRegExp(configuration.wordPattern),
             indentationRules: reviveIndentationRule(configuration.indentationRules),
             onEnterRules: reviveOnEnterRules(configuration.onEnterRules),
+            autoClosingPairs: configuration.autoClosingPairs
         };
 
         this.register(handle, monaco.languages.setLanguageConfiguration(languageId, config));
@@ -644,7 +647,9 @@ export class LanguagesMainImpl implements LanguagesMain, Disposable {
     protected async provideSignatureHelp(handle: number, model: monaco.editor.ITextModel,
         position: monaco.Position, token: monaco.CancellationToken,
         context: monaco.languages.SignatureHelpContext): Promise<monaco.languages.ProviderResult<monaco.languages.SignatureHelpResult>> {
-        const value = await this.proxy.$provideSignatureHelp(handle, model.uri, position, context, token);
+
+        // need to cast because of vscode issue https://github.com/microsoft/vscode/issues/190584
+        const value = await this.proxy.$provideSignatureHelp(handle, model.uri, position, context as SignatureHelpContext, token);
         if (!value) {
             return undefined;
         }
@@ -726,22 +731,37 @@ export class LanguagesMainImpl implements LanguagesMain, Disposable {
         return this.proxy.$provideOnTypeFormattingEdits(handle, model.uri, position, ch, options, token);
     }
 
-    $registerDocumentDropEditProvider(handle: number, selector: SerializedDocumentFilter[]): void {
-        this.register(handle, (StandaloneServices.get(ILanguageFeaturesService).documentOnDropEditProvider.register(selector, this.createDocumentDropEditProvider(handle))));
+    $registerDocumentDropEditProvider(handle: number, selector: SerializedDocumentFilter[], metadata?: DocumentDropEditProviderMetadata): void {
+        this.register(
+            handle,
+            StandaloneServices
+                .get(ILanguageFeaturesService)
+                .documentOnDropEditProvider
+                .register(selector, this.createDocumentDropEditProvider(handle, metadata))
+        );
     }
 
-    createDocumentDropEditProvider(handle: number): DocumentOnDropEditProvider {
+    createDocumentDropEditProvider(handle: number, _metadata?: DocumentDropEditProviderMetadata): DocumentOnDropEditProvider {
         return {
+            // @monaco-uplift id and dropMimeTypes should be supported by the monaco drop editor provider after 1.82.0
+            // id?: string;
+            // dropMimeTypes: metadata?.dropMimeTypes ?? ['*/*'],
             provideDocumentOnDropEdits: async (model, position, dataTransfer, token) => this.provideDocumentDropEdits(handle, model, position, dataTransfer, token)
         };
     }
 
     protected async provideDocumentDropEdits(handle: number, model: ITextModel, position: monaco.IPosition,
-        dataTransfer: VSDataTransfer, token: CancellationToken): Promise<DocumentOnDropEdit | undefined> {
+        dataTransfer: IReadonlyVSDataTransfer, token: CancellationToken): Promise<DocumentOnDropEdit | undefined> {
         await this.fileUploadService.upload(new URI(), { source: dataTransfer, leaveInTemp: true });
         const edit = await this.proxy.$provideDocumentDropEdits(handle, model.uri, position, await DataTransfer.toDataTransferDTO(dataTransfer), token);
         if (edit) {
             return {
+                // @monaco-uplift label and yieldTo should be supported by monaco after 1.82.0. The implementation relies on a copy of the plugin data
+                // label: label: edit.label ?? localize('defaultDropLabel', "Drop using '{0}' extension", this._extension.displayName || this._extension.name),,
+                // yieldTo: edit.yieldTo?.map(yTo => {
+                //      return 'mimeType' in yTo ? yTo : { providerId: DocumentOnDropEditAdapter.toInternalProviderId(yTo.extensionId, yTo.providerId) };
+                // }),
+                label: 'no label',
                 insertText: edit.insertText instanceof SnippetString ? { snippet: edit.insertText.value } : edit.insertText,
                 additionalEdit: toMonacoWorkspaceEdit(edit?.additionalEdit)
             };
@@ -871,7 +891,8 @@ export class LanguagesMainImpl implements LanguagesMain, Disposable {
                 };
             },
             resolveInlayHint: async (hint, token): Promise<monaco.languages.InlayHint | undefined> => {
-                const dto: InlayHintDto = hint;
+                // need to cast because of vscode issue https://github.com/microsoft/vscode/issues/190584
+                const dto: InlayHintDto = hint as InlayHintDto;
                 if (typeof dto.cacheId !== 'number') {
                     return hint;
                 }
@@ -1405,11 +1426,12 @@ export function toMonacoWorkspaceEdit(data: WorkspaceEditDto | undefined): monac
                     metadata: edit.metadata
                 };
             } else {
+                const fileEdit = edit as WorkspaceFileEditDto;
                 return <monaco.languages.IWorkspaceFileEdit>{
-                    newResource: monaco.Uri.revive(edit.newResource),
-                    oldResource: monaco.Uri.revive(edit.oldResource),
-                    options: edit.options,
-                    metadata: edit.metadata
+                    newResource: monaco.Uri.revive(fileEdit.newResource),
+                    oldResource: monaco.Uri.revive(fileEdit.oldResource),
+                    options: fileEdit.options,
+                    metadata: fileEdit.metadata
                 };
             }
         })

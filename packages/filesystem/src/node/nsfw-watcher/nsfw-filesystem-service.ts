@@ -18,7 +18,7 @@ import nsfw = require('@theia/core/shared/nsfw');
 import path = require('path');
 import { promises as fsp } from 'fs';
 import { IMinimatch, Minimatch } from 'minimatch';
-import { FileUri } from '@theia/core/lib/node/file-uri';
+import { FileUri } from '@theia/core/lib/common/file-uri';
 import {
     FileChangeType, FileSystemWatcherService, FileSystemWatcherServiceClient, WatchOptions
 } from '../../common/filesystem-watcher-protocol';
@@ -73,7 +73,7 @@ export class NsfwWatcher {
     /**
      * When the ref count hits zero, we schedule this watch handle to be disposed.
      */
-    protected deferredDisposalTimer: NodeJS.Timer | undefined;
+    protected deferredDisposalTimer: NodeJS.Timeout | undefined;
 
     /**
      * This deferred only rejects with `WatcherDisposal` and never resolves.

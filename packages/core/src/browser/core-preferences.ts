@@ -25,22 +25,22 @@ import { DefaultTheme } from '@theia/application-package/lib/application-props';
 
 /* eslint-disable max-len */
 const windowTitleDescription = [
-    'Controls the window title based on the active editor. Variables are substituted based on the context:',
-    '`${activeEditorShort}`: the file name (e.g. myFile.txt).',
-    '`${activeEditorMedium}`: the path of the file relative to the workspace folder (e.g. myFolder/myFileFolder/myFile.txt).',
-    '`${activeEditorLong}`: the full path of the file (e.g. /Users/Development/myFolder/myFileFolder/myFile.txt).',
-    '`${activeFolderShort}`: the name of the folder the file is contained in (e.g. myFileFolder).',
-    '`${activeFolderMedium}`: the path of the folder the file is contained in, relative to the workspace folder (e.g. myFolder/myFileFolder).',
-    '`${activeFolderLong}`: the full path of the folder the file is contained in (e.g. /Users/Development/myFolder/myFileFolder).',
-    '`${folderName}`: name of the workspace folder the file is contained in (e.g. myFolder).',
-    '`${folderPath}`: file path of the workspace folder the file is contained in (e.g. /Users/Development/myFolder).',
-    '`${rootName}`: name of the workspace with optional remote name and workspace indicator if applicable (e.g. myFolder, myRemoteFolder [SSH] or myWorkspace (Workspace)).',
-    '`${rootPath}`: file path of the opened workspace or folder (e.g. /Users/Development/myWorkspace).',
-    '`${appName}`: e.g. VS Code.',
-    '`${remoteName}`: e.g. SSH',
-    '`${dirty}`: an indicator for when the active editor has unsaved changes.',
-    '`${separator}`: a conditional separator (" - ") that only shows when surrounded by variables with values or static text.'
-].map(e => nls.localizeByDefault(e)).join('\n- ');
+    nls.localizeByDefault('Controls the window title based on the current context such as the opened workspace or active editor. Variables are substituted based on the context:'),
+    nls.localizeByDefault('`${activeEditorShort}`: the file name (e.g. myFile.txt).'),
+    nls.localizeByDefault('`${activeEditorMedium}`: the path of the file relative to the workspace folder (e.g. myFolder/myFileFolder/myFile.txt).'),
+    nls.localizeByDefault('`${activeEditorLong}`: the full path of the file (e.g. /Users/Development/myFolder/myFileFolder/myFile.txt).'),
+    nls.localizeByDefault('`${activeFolderShort}`: the name of the folder the file is contained in (e.g. myFileFolder).'),
+    nls.localizeByDefault('`${activeFolderMedium}`: the path of the folder the file is contained in, relative to the workspace folder (e.g. myFolder/myFileFolder).'),
+    nls.localizeByDefault('`${activeFolderLong}`: the full path of the folder the file is contained in (e.g. /Users/Development/myFolder/myFileFolder).'),
+    nls.localizeByDefault('`${folderName}`: name of the workspace folder the file is contained in (e.g. myFolder).'),
+    nls.localizeByDefault('`${folderPath}`: file path of the workspace folder the file is contained in (e.g. /Users/Development/myFolder).'),
+    nls.localizeByDefault('`${rootName}`: name of the workspace with optional remote name and workspace indicator if applicable (e.g. myFolder, myRemoteFolder [SSH] or myWorkspace (Workspace)).'),
+    nls.localizeByDefault('`${rootPath}`: file path of the opened workspace or folder (e.g. /Users/Development/myWorkspace).'),
+    nls.localizeByDefault('`${appName}`: e.g. VS Code.'),
+    nls.localizeByDefault('`${remoteName}`: e.g. SSH'),
+    nls.localizeByDefault('`${dirty}`: an indicator for when the active editor has unsaved changes.'),
+    nls.localizeByDefault('`${separator}`: a conditional separator (" - ") that only shows when surrounded by variables with values or static text.')
+].join('\n- ');
 
 export const corePreferenceSchema: PreferenceSchema = {
     'type': 'object',
@@ -81,9 +81,15 @@ export const corePreferenceSchema: PreferenceSchema = {
             markdownDescription: nls.localizeByDefault('Controls the dispatching logic for key presses to use either `code` (recommended) or `keyCode`.')
         },
         'window.tabbar.enhancedPreview': {
-            type: 'boolean',
-            default: false,
-            description: nls.localize('theia/core/enhancedPreview', 'Controls whether more information about the tab should be displayed in horizontal tab bars.')
+            type: 'string',
+            enum: ['classic', 'enhanced', 'visual'],
+            markdownEnumDescriptions: [
+                nls.localize('theia/core/enhancedPreview/classic', 'Display a simple preview of the tab with basic information.'),
+                nls.localize('theia/core/enhancedPreview/enhanced', 'Display an enhanced preview of the tab with additional information.'),
+                nls.localize('theia/core/enhancedPreview/visual', 'Display a visual preview of the tab.'),
+            ],
+            default: 'classic',
+            description: nls.localize('theia/core/enhancedPreview', 'Controls what information about the tab should be displayed in horizontal tab bars, when hovering.')
         },
         'window.menuBarVisibility': {
             type: 'string',
@@ -112,6 +118,22 @@ export const corePreferenceSchema: PreferenceSchema = {
             default: ' - ',
             scope: 'application',
             markdownDescription: nls.localizeByDefault('Separator used by {0}.', '`#window.title#`')
+        },
+        'window.secondaryWindowPlacement': {
+            type: 'string',
+            enum: ['originalSize', 'halfWidth', 'fullSize'],
+            enumDescriptions: [
+                nls.localize('theia/core/secondaryWindow/originalSize', 'The position and size of the extracted widget will be the same as the original widget.'),
+                nls.localize('theia/core/secondaryWindow/halfWidth', 'The position and size of the extracted widget will be half the width of the running Theia application.'),
+                nls.localize('theia/core/secondaryWindow/fullSize', 'The position and size of the extracted widget will be the same as the running Theia application.'),
+            ],
+            default: 'originalSize',
+            description: nls.localize('theia/core/secondaryWindow/description', 'Sets the initial position and size of the extracted secondary window.'),
+        },
+        'window.secondaryWindowAlwaysOnTop': {
+            type: 'boolean',
+            default: false,
+            description: nls.localize('theia/core/secondaryWindow/alwaysOnTop', 'When enabled, the secondary window stays above all other windows, including those of different applications.'),
         },
         'http.proxy': {
             type: 'string',
@@ -177,6 +199,11 @@ export const corePreferenceSchema: PreferenceSchema = {
             'type': 'boolean',
             'description': nls.localizeByDefault('Controls whether an editor is revealed in any of the visible groups if opened. If disabled, an editor will prefer to open in the currently active editor group. If enabled, an already opened editor will be revealed instead of opened again in the currently active editor group. Note that there are some cases where this setting is ignored, such as when forcing an editor to open in a specific group or to the side of the currently active group.'),
             'default': false
+        },
+        'workbench.editor.decorations.badges': {
+            'type': 'boolean',
+            'description': nls.localizeByDefault('Controls whether editor file decorations should use badges.'),
+            'default': true
         },
         'workbench.commandPalette.history': {
             type: 'number',
@@ -263,7 +290,7 @@ export interface CoreConfiguration {
     'breadcrumbs.enabled': boolean;
     'files.encoding': string;
     'keyboard.dispatch': 'code' | 'keyCode';
-    'window.tabbar.enhancedPreview': boolean;
+    'window.tabbar.enhancedPreview': 'classic' | 'enhanced' | 'visual';
     'window.menuBarVisibility': 'classic' | 'visible' | 'hidden' | 'compact';
     'window.title': string;
     'window.titleSeparator': string;
@@ -273,6 +300,7 @@ export interface CoreConfiguration {
     'workbench.editor.mouseBackForwardToNavigate': boolean;
     'workbench.editor.closeOnFileDelete': boolean;
     'workbench.editor.revealIfOpen': boolean;
+    'workbench.editor.decorations.badges': boolean;
     'workbench.colorTheme': string;
     'workbench.iconTheme': string;
     'workbench.silentNotifications': boolean;

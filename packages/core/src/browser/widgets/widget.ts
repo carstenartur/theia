@@ -23,6 +23,7 @@ import { Emitter, Event, Disposable, DisposableCollection, MaybePromise, isObjec
 import { KeyCode, KeysOrKeyCodes } from '../keyboard/keys';
 
 import PerfectScrollbar from 'perfect-scrollbar';
+import { PreviewableWidget } from '../widgets/previewable-widget';
 
 decorate(injectable(), Widget);
 decorate(unmanaged(), Widget, 0);
@@ -93,7 +94,7 @@ export namespace UnsafeWidgetUtilities {
 }
 
 @injectable()
-export class BaseWidget extends Widget {
+export class BaseWidget extends Widget implements PreviewableWidget {
 
     protected readonly onScrollYReachEndEmitter = new Emitter<void>();
     readonly onScrollYReachEnd: Event<void> = this.onScrollYReachEndEmitter.event;
@@ -214,6 +215,10 @@ export class BaseWidget extends Widget {
 
     protected addClipboardListener<K extends 'cut' | 'copy' | 'paste'>(element: HTMLElement, type: K, listener: EventListenerOrEventListenerObject<K>): void {
         this.toDisposeOnDetach.push(addClipboardListener(element, type, listener));
+    }
+
+    getPreviewNode(): Node | undefined {
+        return this.node;
     }
 
     override setFlag(flag: Widget.Flag): void {
@@ -376,10 +381,18 @@ export function pin(title: Title<Widget>): void {
     }
 }
 
+export function isLocked(title: Title<Widget>): boolean {
+    return title.className.includes(LOCKED_CLASS);
+}
+
 export function lock(title: Title<Widget>): void {
     if (!title.className.includes(LOCKED_CLASS)) {
         title.className += ` ${LOCKED_CLASS}`;
     }
+}
+
+export function unlock(title: Title<Widget>): void {
+    title.className = title.className.replace(LOCKED_CLASS, '').trim();
 }
 
 export function togglePinned(title?: Title<Widget>): void {

@@ -50,7 +50,10 @@ import {
     CHANNEL_SET_MENU_BAR_VISIBLE,
     CHANNEL_TOGGLE_FULL_SCREEN,
     CHANNEL_IS_MAXIMIZED,
-    CHANNEL_REQUEST_SECONDARY_CLOSE
+    CHANNEL_REQUEST_SECONDARY_CLOSE,
+    CHANNEL_SET_BACKGROUND_COLOR,
+    CHANNEL_WC_METADATA,
+    CHANNEL_ABOUT_TO_CLOSE
 } from '../electron-common/electron-api';
 import { ElectronMainApplication, ElectronMainApplicationContribution } from './electron-main-application';
 import { Disposable, DisposableCollection, isOSX, MaybePromise } from '../common';
@@ -64,6 +67,10 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
     protected readonly openPopups = new Map<number, Menu>();
 
     onStart(application: ElectronMainApplication): MaybePromise<void> {
+        ipcMain.on(CHANNEL_WC_METADATA, event => {
+            event.returnValue = event.sender.id.toString();
+        });
+
         // electron security token
         ipcMain.on(CHANNEL_GET_SECURITY_TOKEN, event => {
             event.returnValue = this.electronSecurityToken.value;
@@ -108,7 +115,7 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
         });
 
         // popup menu
-        ipcMain.handle(CHANNEL_OPEN_POPUP, (event, menuId, menu, x, y) => {
+        ipcMain.handle(CHANNEL_OPEN_POPUP, (event, menuId, menu, x, y, windowName?: string) => {
             const zoom = event.sender.getZoomFactor();
             // TODO: Remove the offset once Electron fixes https://github.com/electron/electron/issues/31641
             const offset = process.platform === 'win32' ? 0 : 2;
@@ -117,7 +124,14 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
             y = Math.round(y * zoom) + offset;
             const popup = Menu.buildFromTemplate(this.fromMenuDto(event.sender, menuId, menu));
             this.openPopups.set(menuId, popup);
+            let electronWindow: BrowserWindow | undefined;
+            if (windowName) {
+                electronWindow = BrowserWindow.getAllWindows().find(win => win.webContents.mainFrame.name === windowName);
+            } else {
+                electronWindow = BrowserWindow.fromWebContents(event.sender) || undefined;
+            }
             popup.popup({
+                window: electronWindow,
                 callback: () => {
                     this.openPopups.delete(menuId);
                     event.sender.send(CHANNEL_ON_CLOSE_POPUP, menuId);
@@ -151,6 +165,8 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
         ipcMain.handle(CHANNEL_GET_TITLE_STYLE_AT_STARTUP, event => application.getTitleBarStyleAtStartup(event.sender));
 
         ipcMain.on(CHANNEL_SET_TITLE_STYLE, (event, style) => application.setTitleBarStyle(event.sender, style));
+
+        ipcMain.on(CHANNEL_SET_BACKGROUND_COLOR, (event, backgroundColor) => application.setBackgroundColor(event.sender, backgroundColor));
 
         ipcMain.on(CHANNEL_MINIMIZE, event => {
             BrowserWindow.fromWebContents(event.sender)?.minimize();
@@ -249,6 +265,19 @@ let nextReplyChannel: number = 0;
 export namespace TheiaRendererAPI {
     export function sendWindowEvent(wc: WebContents, event: WindowEvent): void {
         wc.send(CHANNEL_ON_WINDOW_EVENT, event);
+    }
+
+    export function sendAboutToClose(wc: WebContents): Promise<void> {
+        return new Promise<void>(resolve => {
+            const channelNr = nextReplyChannel++;
+            const replyChannel = `aboutToClose${channelNr}`;
+            const l = createDisposableListener(ipcMain, replyChannel, e => {
+                l.dispose();
+                resolve();
+            });
+
+            wc.send(CHANNEL_ABOUT_TO_CLOSE, replyChannel);
+        });
     }
 
     export function requestClose(wc: WebContents, stopReason: StopReason): Promise<boolean> {

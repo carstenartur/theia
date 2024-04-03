@@ -1,5 +1,9 @@
 {
   "debug.breakpoint.editCondition": "編集条件...",
+  "notebook.cell.insertMarkdownCellAbove": "マークダウン・セルを上に挿入する",
+  "notebook.cell.insertMarkdownCellBelow": "下にマークダウン・セルを挿入する",
+  "notebook.cell.to-code-cell": "セルをコードに変更",
+  "notebook.cell.to-markdown-cell": "セルをマーダウンに変更",
   "terminal:new:profile": "プロファイルから新しい統合端末を作成する",
   "terminal:profile:default": "デフォルトの端末プロファイルを選択",
   "theia": {
@@ -30,7 +34,14 @@
         "showPreviousTabInGroup": "グループ内の前のタブに切り替える",
         "toggleMaximized": "トグル・マキシマイズ"
       },
-      "enhancedPreview": "水平タブバーにタブに関する詳細情報を表示するかどうかを制御します。",
+      "copyInfo": "まずファイルを開き、そのパスをコピーする",
+      "copyWarn": "ブラウザのコピーコマンドまたはショートカットをご利用ください。",
+      "cutWarn": "ブラウザのカットコマンドまたはショートカットをご利用ください。",
+      "enhancedPreview": {
+        "classic": "タブの基本情報を含む簡単なプレビューを表示する。",
+        "enhanced": "追加情報を含むタブの拡張プレビューを表示します。",
+        "visual": "タブのビジュアルプレビューを表示する。"
+      },
       "file": {
         "browse": "ブラウズ"
       },
@@ -50,12 +61,20 @@
         "clipboardWarnFirefox": "クリップボードAPIは使用できません。これは、'{1}' ページの '{0}' 環境設定によって有効にすることができます。その後Theiaをリロードしてください。これにより、FireFoxがシステムクリップボードにフルアクセスできるようになります。"
       },
       "offline": "オフライン",
+      "pasteWarn": "ブラウザの貼り付けコマンドまたはショートカットをご利用ください。",
       "quitMessage": "保存されていない変更は、保存されません。",
       "resetWorkbenchLayout": "ワークベンチレイアウトのリセット",
       "searchbox": {
         "close": "閉じる(エスケープ)",
         "next": "次へ(下)",
         "previous": "前へ (上)"
+      },
+      "secondaryWindow": {
+        "alwaysOnTop": "有効にすると、セカンダリウィンドウは、異なるアプリケーションを含む他のすべてのウィンドウの上に表示されます。",
+        "description": "抽出されたセカンダリウィンドウの初期位置とサイズを設定する。",
+        "fullSize": "抽出されたウィジェットの位置とサイズは、実行中のTheiaアプリケーションと同じになります。",
+        "halfWidth": "抽出されたウィジェットの位置とサイズは、実行中のTheiaアプリケーションの幅の半分になります。",
+        "originalSize": "抽出されたウィジェットの位置とサイズは、元のウィジェットと同じになる。"
       },
       "silentNotifications": "通知のポップアップを抑制するかどうかを制御します。",
       "tabDefaultSize": "タブのデフォルトサイズを指定します。",
@@ -65,25 +84,47 @@
     },
     "debug": {
       "addConfigurationPlaceholder": "設定を追加するワークスペース・ルートを選択します。",
+      "breakpoint": "ブレークポイント",
       "compound-cycle": "起動構成 '{0}' は自分自身とのサイクルを含む",
       "continueAll": "すべてを続ける",
       "copyExpressionValue": "コピー式の値",
+      "dataBreakpoint": "データブレークポイント",
       "debugVariableInput": "設定{0} 値",
+      "entry": "エントリー",
+      "exception": "例外",
+      "functionBreakpoint": "関数ブレークポイント",
+      "goto": "行く",
       "instruction-breakpoint": "命令ブレークポイント",
+      "instructionBreakpoint": "命令ブレークポイント",
       "missingConfiguration": "ダイナミックコンフィギュレーション「{0}:{1}」が存在しないか、適用できない",
+      "pause": "ポーズ",
       "pauseAll": "ポーズ・オール",
       "reveal": "暴露",
+      "step": "ステップ",
       "threads": "スレッド",
       "toggleTracing": "デバッグアダプタとの通信のトレースの有効化/無効化"
     },
     "editor": {
+      "diffEditor.wordWrap2": "行は `#editor.wordWrap#` の設定に従って折り返されます。",
       "dirtyEncoding": "ファイルが汚れています。別のエンコーディングで開き直す前に、まず保存してください。",
-      "editor.codeActionWidget.showHeaders": "コードアクションメニューにグループヘッダを表示するかどうかを設定します。",
+      "editor.accessibilitySupport0": "プラットフォームAPIを使用して、スクリーンリーダーが接続されていることを検出する。",
+      "editor.accessibilitySupport1": "スクリーンリーダーでの使用に最適化する",
+      "editor.accessibilitySupport2": "スクリーンリーダーが添付されていないと仮定する",
+      "editor.bracketPairColorization.enabled": "ブラケットペアのカラー化を有効にするかどうかを制御する。ブラケットのハイライト色を上書きするには `#workbench.colorCustomizations#` を使用してください。",
+      "editor.codeActionWidget.includeNearbyQuickfixes": "現在診断中でない場合に、行内に最も近いクイックフィックスを表示するかどうかを設定します。",
+      "editor.detectIndentation": "ファイルを開いたときに、ファイルの内容に基づいて `#editor.tabSize#` と `#editor.insertSpaces#` を自動的に検出するかどうかを制御する。",
       "editor.formatOnSaveMode.modificationsIfAvailable": "変更点のみをフォーマットしようとします(ソースコントロールが必要です)。ソースコントロールが使用できない場合は、ファイル全体がフォーマットされます。",
+      "editor.hover.hidingDelay": "ホバーが非表示になるまでの遅延をミリ秒単位で制御する。editor.hover.sticky`が有効になっている必要があります。",
       "editor.inlayHints.enabled1": "インレイのヒントはデフォルトで表示され、`Ctrl+Alt`を押すと隠れます。",
       "editor.inlayHints.enabled2": "インレイのヒントはデフォルトでは非表示で、`Ctrl+Alt`を押したときに表示されます。",
+      "editor.inlayHints.fontFamily": "エディタのインレイヒントのフォントファミリーを制御する。空に設定すると、`#editor.fontFamily#`が使用されます。",
+      "editor.inlayHints.fontSize": "エディタのインレイヒントのフォントサイズを制御する。デフォルトでは`#editor.fontSize#`が使用され、設定値が`5`未満またはエディタのフォントサイズより大きい場合に使用されます。",
+      "editor.insertSpaces": "Tab`を押したときにスペースを挿入する。この設定は、`#editor.detectIndentation#`がオンの場合、ファイルの内容によって上書きされる。",
       "editor.quickSuggestions": "入力中に自動的にサジェストを表示するかどうかを制御します。コメント、文字列、その他のコードを入力する際に制御できます。クイックサジェストは、ゴーストテキストとして表示するか、サジェストウィジェットで表示するかを設定できます。また、'#editor.suggestOnTriggerCharacters#'設定は、特殊な文字でサジェストが発生するかどうかを制御します。",
-      "editor.suggest.matchOnWordStartOnly": "インテリセンスのフィルタリングを有効にすると、最初の文字が単語の先頭にマッチする必要があります。例えば、`Console` や `WebContext` では `c` ですが、`description` では _not_ です。無効化すると、インテリセンスはより多くの結果を表示しますが、マッチの質でソートされます。",
+      "editor.stickyScroll.scrollWithEditor": "エディターの水平スクロールバーでスティッキースクロールウィジェットのスクロールを有効にする。",
+      "editor.suggestFontSize": "サジェストウィジェットのフォントサイズ。0`に設定すると、`#editor.fontSize#`の値が使用される。",
+      "editor.suggestLineHeight": "提案ウィジェットの行の高さ。0`に設定すると、`#editor.lineHeight#`の値が使用される。最小値は8。",
+      "editor.tabSize": "タブのスペース数。この設定は、`#editor.detectIndentation#`がオンの場合、ファイルの内容によって上書きされる。",
       "files.autoSave": "未保存の変更があるエディターの[自動保存](https://code.visualstudio.com/docs/editor/codebasics#_save-auto-save)を制御します。",
       "files.autoSave.afterDelay": "変更されたエディターは、設定された `#files.autoSaveDelay#` の後に自動的に保存されます。",
       "files.autoSave.off": "変更されたエディタは、自動的に保存されることはありません。",
@@ -108,6 +149,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "ダウンロードリンクをクリップボードにコピー。",
       "copyDownloadLink": "コピー・ダウンロード・リンク",
       "dialog": {
         "initialLocation": "初期位置へ移動",
@@ -137,12 +179,15 @@
     "getting-started": {
       "apiComparator": "{0} API互換性",
       "newExtension": "新しいエクステンションの構築",
-      "newPlugin": "新しいプラグインの構築"
+      "newPlugin": "新しいプラグインの構築",
+      "startup-editor": {
+        "welcomePage": "{0} とエクステンションを使い始めるのに役立つコンテンツを含む、ようこそページを開きます。"
+      }
     },
     "git": {
       "aFewSecondsAgo": "さきほど",
       "addSignedOff": "サイン・オフ・バイの追加",
-      "amendReuseMessag": "最後のコミットメッセージを再利用するには、「Enter」または「Escape」を押してキャンセルしてください。",
+      "amendReuseMessage": "最後のコミットメッセージを再利用するには、「Enter」または「Escape」を押してキャンセルしてください。",
       "amendRewrite": "前回のコミットメッセージを書き換えます。確定するには「Enter」を、キャンセルするには「Escape」を押してください。",
       "checkoutCreateLocalBranchWithName": "名前:{0}で新しいローカルブランチを作成します。確定するには「Enter」を、キャンセルするには「Escape」を押してください。",
       "checkoutProvideBranchName": "支店名をご記入ください。",
@@ -174,7 +219,18 @@
       "deprecation": "代わりに `when` 句を使用してください。"
     },
     "keymaps": {
+      "addKeybindingTitle": "のキーバインドを追加{0}",
+      "editKeybinding": "キーバインドを編集...",
       "editKeybindingTitle": "{0}のキーバインドを編集する",
+      "editWhenExpression": "Edit When Expression...",
+      "editWhenExpressionTitle": "を表す式を編集する{0}",
+      "keybinding": {
+        "copy": "コピー・キーバインド",
+        "copyCommandId": "キーバインドコマンドIDのコピー",
+        "copyCommandTitle": "キーバインドコマンドのタイトルをコピーする",
+        "edit": "キーバインドを編集...",
+        "editWhenExpression": "キーバインドを編集する(Expression..."
+      },
       "keybindingCollidesValidation": "キーバインドがコリジョン中",
       "requiredKeybindingValidation": "キーバインド値が必要です",
       "resetKeybindingConfirmation": "このキーバインドを本当に初期値に戻すのですか?",
@@ -216,6 +272,7 @@
         "offset-title": "からメモリをオフセットするバイト数{0}"
       },
       "editable": {
+        "apply": "変更を適用する",
         "clear": "クリアランス"
       },
       "endianness": "エンディアン",
@@ -279,6 +336,7 @@
       "autoReveal": "オートリヴェール",
       "clipboardWarn": "クリップボードへのアクセスが拒否されました。ブラウザのアクセス許可を確認してください。",
       "clipboardWarnFirefox": "クリップボードAPIは使用できません。これは、'{1}' ページの '{0}' 環境設定によって有効にすることができます。その後Theiaをリロードしてください。これにより、FireFoxがシステムクリップボードにフルアクセスできるようになります。",
+      "noFolderOpened": "フォルダが開かない",
       "refresh": "エクスプローラーでの更新",
       "reveal": "エクスプローラーでの表示",
       "toggleHiddenFiles": "隠しファイルのトグル"
@@ -323,6 +381,9 @@
       "watchMode": "開発中のプラグインにウォッチャーを実行"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "ログイン"
+      },
       "plugins": "プラグイン",
       "webviewTrace": "ウェブビューによる通信のトレースを制御します。",
       "webviewWarnIfUnsecure": "現在、ウェブビューが安全でない状態で展開されていることをユーザーに警告します。"
@@ -364,8 +425,7 @@
       "extract-widget": "セカンダリーウィンドウへの表示移動"
     },
     "shell-area": {
-      "secondary": "セカンダリーウィンドウ",
-      "top": "トップ"
+      "secondary": "セカンダリーウィンドウ"
     },
     "task": {
       "attachTask": "タスクの添付...",
@@ -385,6 +445,7 @@
       "profilePath": "このプロファイルが使用するシェルのパス。",
       "profiles": "新しいターミナルを作成するときに提示するプロファイル。オプションのアーギュメントを使用して、手動でパスプロパティを設定します。\n既存のプロファイルを `null` に設定すると、リストからプロファイルを隠すことができます。 例: `\"{0}\": null`.",
       "rendererType": "端末のレンダリング方法を制御する。",
+      "rendererTypeDeprecationMessage": "レンダラータイプはオプションとしてサポートされなくなった。",
       "selectProfile": "新規端末のプロファイルを選択する",
       "shell.deprecated": "これは非推奨です。デフォルトシェルを設定する新しい推奨方法は、 'terminal.integrated.profiles.{0}' でターミナルプロファイルを作成し、 'terminal.integrated.defaultProfile.{0}.' でそのプロファイル名をデフォルトとして設定する方法です。",
       "shellArgsLinux": "Linux端末で使用するコマンドライン引数です。",
@@ -393,6 +454,11 @@
       "shellLinux": "Linuxでターミナルが使用するシェルのパス(デフォルト:'{0}'})。",
       "shellOsx": "macOSでターミナルが使用するシェルのパスです(デフォルト:'{0}'})。",
       "shellWindows": "Windowsでターミナルが使用するシェルのパスです。(デフォルト: '{0}')を指定します。"
+    },
+    "test": {
+      "cancelAllTestRuns": "すべてのテスト実行をキャンセルする",
+      "testRunDefaultName": "{0} 走る{1}",
+      "testRuns": "テスト走行"
     },
     "toolbar": {
       "addCommand": "ツールバーへのコマンド追加",
@@ -419,11 +485,16 @@
       "supertypeHierarchy": "スーパータイプヒエラルキー"
     },
     "vsx-registry": {
+      "confirmDialogMessage": "拡張子 \"{0}\" は未検証であり、セキュリティリスクをもたらす可能性があります。",
+      "confirmDialogTitle": "本当にインストールを続行しますか?",
       "downloadCount": "ダウンロード回数{0}",
       "errorFetching": "拡張機能の取得にエラーが発生しました。",
+      "errorFetchingConfigurationHint": "これは、ネットワーク設定の問題が原因である可能性がある。",
       "failedInstallingVSIX": "VSIXから{0} のインストールに失敗しました。",
       "invalidVSIX": "選択されたファイルは、有効な \"*.vsix \"プラグインではありません。",
       "license": "ライセンス{0}",
+      "onlyShowVerifiedExtensionsDescription": "これにより、{0} 、検証済みの拡張子のみを表示することができる。",
+      "onlyShowVerifiedExtensionsTitle": "検証済みのエクステンションのみ表示",
       "recommendedExtensions": "このワークスペースでの使用が推奨される拡張機能の名前のリストです。",
       "searchPlaceholder": "{0}で拡張子を検索",
       "showInstalled": "インストールされている拡張機能を表示する",

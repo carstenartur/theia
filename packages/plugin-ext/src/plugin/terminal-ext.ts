@@ -14,16 +14,19 @@
 // SPDX-License-Identifier: EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0
 // *****************************************************************************
 import { UUID } from '@theia/core/shared/@phosphor/coreutils';
+import { inject, injectable } from '@theia/core/shared/inversify';
 import { Terminal, TerminalOptions, PseudoTerminalOptions, ExtensionTerminalOptions, TerminalState } from '@theia/plugin';
 import { TerminalServiceExt, TerminalServiceMain, PLUGIN_RPC_CONTEXT } from '../common/plugin-api-rpc';
 import { RPCProtocol } from '../common/rpc-protocol';
 import { Event, Emitter } from '@theia/core/lib/common/event';
+import { MultiKeyMap } from '@theia/core/lib/common/collections';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import * as theia from '@theia/plugin';
+import * as Converter from './type-converters';
 import { Disposable, EnvironmentVariableMutatorType, TerminalExitReason, ThemeIcon } from './types-impl';
-import { SerializableEnvironmentVariableCollection } from '@theia/terminal/lib/common/base-terminal-protocol';
+import { NO_ROOT_URI, SerializableEnvironmentVariableCollection } from '@theia/terminal/lib/common/shell-terminal-protocol';
 import { ProvidedTerminalLink } from '../common/plugin-api-rpc-model';
-import { ThemeIcon as MonacoThemeIcon } from '@theia/monaco-editor-core/esm/vs/platform/theme/common/themeService';
+import { ThemeIcon as MonacoThemeIcon } from '@theia/monaco-editor-core/esm/vs/base/common/themables';
 
 export function getIconUris(iconPath: theia.TerminalOptions['iconPath']): { id: string } | undefined {
     if (ThemeIcon.is(iconPath)) {
@@ -44,8 +47,8 @@ export function getIconClass(options: theia.TerminalOptions | theia.ExtensionTer
  * Provides high level terminal plugin api to use in the Theia plugins.
  * This service allow(with help proxy) create and use terminal emulator.
  */
+ @injectable()
 export class TerminalServiceExtImpl implements TerminalServiceExt {
-
     private readonly proxy: TerminalServiceMain;
 
     private readonly _terminals = new Map<string, TerminalExtImpl>();
@@ -54,6 +57,7 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
 
     private static nextProviderId = 0;
     private readonly terminalLinkProviders = new Map<string, theia.TerminalLinkProvider>();
+    private readonly terminalObservers = new Map<string, theia.TerminalObserver>();
     private readonly terminalProfileProviders = new Map<string, theia.TerminalProfileProvider>();
     private readonly onDidCloseTerminalEmitter = new Emitter<Terminal>();
     readonly onDidCloseTerminal: theia.Event<Terminal> = this.onDidCloseTerminalEmitter.event;
@@ -67,14 +71,29 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
     private readonly onDidChangeTerminalStateEmitter = new Emitter<Terminal>();
     readonly onDidChangeTerminalState: theia.Event<Terminal> = this.onDidChangeTerminalStateEmitter.event;
 
-    protected environmentVariableCollections: Map<string, EnvironmentVariableCollection> = new Map();
+    protected environmentVariableCollections: MultiKeyMap<string, EnvironmentVariableCollectionImpl> = new MultiKeyMap(2);
 
-    constructor(rpc: RPCProtocol) {
+    private shell: string;
+    private readonly onDidChangeShellEmitter = new Emitter<string>();
+    readonly onDidChangeShell: theia.Event<string> = this.onDidChangeShellEmitter.event;
+
+    constructor(@inject(RPCProtocol) rpc: RPCProtocol) {
         this.proxy = rpc.getProxy(PLUGIN_RPC_CONTEXT.TERMINAL_MAIN);
     }
 
     get terminals(): TerminalExtImpl[] {
         return [...this._terminals.values()];
+    }
+
+    get defaultShell(): string {
+        return this.shell || '';
+    }
+
+    async $setShell(shell: string): Promise<void> {
+        if (this.shell !== shell) {
+            this.shell = shell;
+            this.onDidChangeShellEmitter.fire(shell);
+        }
     }
 
     createTerminal(
@@ -251,6 +270,25 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
         return Disposable.NULL;
     }
 
+    registerTerminalObserver(observer: theia.TerminalObserver): theia.Disposable {
+        const id = (TerminalServiceExtImpl.nextProviderId++).toString();
+        this.terminalObservers.set(id, observer);
+        this.proxy.$registerTerminalObserver(id, observer.nrOfLinesToMatch, observer.outputMatcherRegex);
+        return Disposable.create(() => {
+            this.proxy.$unregisterTerminalObserver(id);
+            this.terminalObservers.delete(id);
+        });
+    }
+
+    $reportOutputMatch(observerId: string, groups: string[]): void {
+        const observer = this.terminalObservers.get(observerId);
+        if (observer) {
+            observer.matchOccurred(groups);
+        } else {
+            throw new Error(`reporting matches for unregistered observer: ${observerId} `);
+        }
+    }
+
     protected isExtensionTerminalOptions(options: theia.TerminalOptions | theia.ExtensionTerminalOptions): options is theia.ExtensionTerminalOptions {
         return 'pty' in options;
     }
@@ -302,44 +340,62 @@ export class TerminalServiceExtImpl implements TerminalServiceExt {
      *--------------------------------------------------------------------------------------------*/
     // some code copied and modified from https://github.com/microsoft/vscode/blob/1.49.0/src/vs/workbench/api/common/extHostTerminalService.ts
 
-    getEnvironmentVariableCollection(extensionIdentifier: string): theia.EnvironmentVariableCollection {
-        let collection = this.environmentVariableCollections.get(extensionIdentifier);
+    getEnvironmentVariableCollection(extensionIdentifier: string, rootUri: string = NO_ROOT_URI): theia.GlobalEnvironmentVariableCollection {
+        const that = this;
+        let collection = this.environmentVariableCollections.get([extensionIdentifier, rootUri]);
         if (!collection) {
-            collection = new EnvironmentVariableCollection();
-            this.setEnvironmentVariableCollection(extensionIdentifier, collection);
+            collection = new class extends EnvironmentVariableCollectionImpl {
+                override getScoped(scope: theia.EnvironmentVariableScope): theia.EnvironmentVariableCollection {
+                    return that.getEnvironmentVariableCollection(extensionIdentifier, scope.workspaceFolder?.uri.toString());
+                }
+            }(true);
+            this.setEnvironmentVariableCollection(extensionIdentifier, rootUri, collection);
         }
         return collection;
     }
 
-    private syncEnvironmentVariableCollection(extensionIdentifier: string, collection: EnvironmentVariableCollection): void {
+    private syncEnvironmentVariableCollection(extensionIdentifier: string, rootUri: string, collection: EnvironmentVariableCollectionImpl): void {
         const serialized = [...collection.map.entries()];
-        this.proxy.$setEnvironmentVariableCollection(extensionIdentifier, collection.persistent, serialized.length === 0 ? undefined : serialized);
+        this.proxy.$setEnvironmentVariableCollection(collection.persistent, extensionIdentifier,
+            rootUri,
+            {
+                mutators: serialized,
+                description: Converter.fromMarkdownOrString(collection.description)
+            });
     }
 
-    private setEnvironmentVariableCollection(extensionIdentifier: string, collection: EnvironmentVariableCollection): void {
-        this.environmentVariableCollections.set(extensionIdentifier, collection);
+    private setEnvironmentVariableCollection(pluginIdentifier: string, rootUri: string, collection: EnvironmentVariableCollectionImpl): void {
+        this.environmentVariableCollections.set([pluginIdentifier, rootUri], collection);
         collection.onDidChangeCollection(() => {
             // When any collection value changes send this immediately, this is done to ensure
             // following calls to createTerminal will be created with the new environment. It will
             // result in more noise by sending multiple updates when called but collections are
             // expected to be small.
-            this.syncEnvironmentVariableCollection(extensionIdentifier, collection);
+            this.syncEnvironmentVariableCollection(pluginIdentifier, rootUri, collection);
         });
     }
 
-    $initEnvironmentVariableCollections(collections: [string, SerializableEnvironmentVariableCollection][]): void {
+    $initEnvironmentVariableCollections(collections: [string, string, boolean, SerializableEnvironmentVariableCollection][]): void {
         collections.forEach(entry => {
             const extensionIdentifier = entry[0];
-            const collection = new EnvironmentVariableCollection(entry[1]);
-            this.setEnvironmentVariableCollection(extensionIdentifier, collection);
+            const rootUri = entry[1];
+            const collection = new EnvironmentVariableCollectionImpl(entry[2], entry[3]);
+            this.setEnvironmentVariableCollection(extensionIdentifier, rootUri, collection);
         });
     }
 
 }
 
-export class EnvironmentVariableCollection implements theia.EnvironmentVariableCollection {
+export class EnvironmentVariableCollectionImpl implements theia.GlobalEnvironmentVariableCollection {
     readonly map: Map<string, theia.EnvironmentVariableMutator> = new Map();
+    private _description?: string | theia.MarkdownString;
     private _persistent: boolean = true;
+
+    public get description(): string | theia.MarkdownString | undefined { return this._description; }
+    public set description(value: string | theia.MarkdownString | undefined) {
+        this._description = value;
+        this.onDidChangeCollectionEmitter.fire();
+    }
 
     public get persistent(): boolean { return this._persistent; }
     public set persistent(value: boolean) {
@@ -351,25 +407,31 @@ export class EnvironmentVariableCollection implements theia.EnvironmentVariableC
     onDidChangeCollection: Event<void> = this.onDidChangeCollectionEmitter.event;
 
     constructor(
+        persistent: boolean,
         serialized?: SerializableEnvironmentVariableCollection
     ) {
-        this.map = new Map(serialized);
+        this._persistent = persistent;
+        this.map = new Map(serialized?.mutators);
+    }
+
+    getScoped(scope: theia.EnvironmentVariableScope): theia.EnvironmentVariableCollection {
+        throw new Error('Cannot get scoped from a regular env var collection');
     }
 
     get size(): number {
         return this.map.size;
     }
 
-    replace(variable: string, value: string): void {
-        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Replace });
+    replace(variable: string, value: string, options?: theia.EnvironmentVariableMutatorOptions): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Replace, options: options ?? { applyAtProcessCreation: true } });
     }
 
-    append(variable: string, value: string): void {
-        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Append });
+    append(variable: string, value: string, options?: theia.EnvironmentVariableMutatorOptions): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Append, options: options ?? { applyAtProcessCreation: true } });
     }
 
-    prepend(variable: string, value: string): void {
-        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Prepend });
+    prepend(variable: string, value: string, options?: theia.EnvironmentVariableMutatorOptions): void {
+        this._setIfDiffers(variable, { value, type: EnvironmentVariableMutatorType.Prepend, options: options ?? { applyAtProcessCreation: true } });
     }
 
     private _setIfDiffers(variable: string, mutator: theia.EnvironmentVariableMutator): void {
@@ -422,8 +484,8 @@ export class TerminalExtImpl implements Terminal {
         this.creationOptions = this.options;
     }
 
-    sendText(text: string, addNewLine: boolean = true): void {
-        this.id.promise.then(id => this.proxy.$sendText(id, text, addNewLine));
+    sendText(text: string, shouldExecute: boolean = true): void {
+        this.id.promise.then(id => this.proxy.$sendText(id, text, shouldExecute));
     }
 
     show(preserveFocus?: boolean): void {

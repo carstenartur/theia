@@ -22,7 +22,8 @@ import {
     MenuModelRegistry, MAIN_MENU_BAR, MenuPath, MenuNode, MenuCommandExecutor, CompoundMenuNode, CompoundMenuNodeRole, CommandMenuNode
 } from '../../common';
 import { KeybindingRegistry } from '../keybinding';
-import { FrontendApplicationContribution, FrontendApplication } from '../frontend-application';
+import { FrontendApplication } from '../frontend-application';
+import { FrontendApplicationContribution } from '../frontend-application-contribution';
 import { ContextKeyService, ContextMatcher } from '../context-key-service';
 import { ContextMenuContext } from './context-menu-context';
 import { waitForRevealed } from '../widgets';
@@ -108,8 +109,8 @@ export class BrowserMainMenuFactory implements MenuWidgetFactory {
         }
     }
 
-    createContextMenu(path: MenuPath, args?: unknown[], context?: HTMLElement, contextKeyService?: ContextMatcher): MenuWidget {
-        const menuModel = this.menuProvider.getMenu(path);
+    createContextMenu(path: MenuPath, args?: unknown[], context?: HTMLElement, contextKeyService?: ContextMatcher, skipSingleRootNode?: boolean): MenuWidget {
+        const menuModel = skipSingleRootNode ? this.menuProvider.removeSingleRootNode(this.menuProvider.getMenu(path), path) : this.menuProvider.getMenu(path);
         const menuCommandRegistry = this.createMenuCommandRegistry(menuModel, args).snapshot(path);
         const contextMenu = this.createMenuWidget(menuModel, { commands: menuCommandRegistry, context, rootMenuPath: path, contextKeyService });
         return contextMenu;
@@ -266,14 +267,14 @@ export class DynamicMenuWidget extends MenuWidget {
         });
     }
 
-    public override open(x: number, y: number, options?: MenuWidget.IOpenOptions): void {
+    public override open(x: number, y: number, options?: MenuWidget.IOpenOptions, anchor?: HTMLElement): void {
         const cb = () => {
             this.restoreFocusedElement();
             this.aboutToClose.disconnect(cb);
         };
         this.aboutToClose.connect(cb);
         this.preserveFocusedElement();
-        super.open(x, y, options);
+        super.open(x, y, options, anchor);
     }
 
     protected updateSubMenus(parent: MenuWidget, menu: CompoundMenuNode, commands: MenuCommandRegistry): void {

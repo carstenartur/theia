@@ -34,25 +34,6 @@ export interface IBaseTerminalServer extends RpcServer<IBaseTerminalClient> {
     onAttachAttempted(id: number): Promise<void>;
     close(id: number): Promise<void>;
     getDefaultShell(): Promise<string>;
-
-    /**
-     * Gets a single collection constructed by merging all environment variable collections into
-     * one.
-     */
-    readonly collections: ReadonlyMap<string, EnvironmentVariableCollection>;
-    /**
-     * Gets a single collection constructed by merging all environment variable collections into
-     * one.
-     */
-    readonly mergedCollection: MergedEnvironmentVariableCollection;
-    /**
-     * Sets an extension's environment variable collection.
-     */
-    setCollection(extensionIdentifier: string, persistent: boolean, collection: SerializableEnvironmentVariableCollection): void;
-    /**
-     * Deletes an extension's environment variable collection.
-     */
-    deleteCollection(extensionIdentifier: string): void;
 }
 export namespace IBaseTerminalServer {
     export function validateId(id?: number): boolean {
@@ -67,6 +48,8 @@ export interface IBaseTerminalExitEvent {
     code?: number;
     reason?: TerminalExitReason;
     signal?: string;
+
+    attached?: boolean;
 }
 
 export enum TerminalExitReason {
@@ -79,7 +62,8 @@ export enum TerminalExitReason {
 
 export interface IBaseTerminalErrorEvent {
     terminalId: number;
-    error: Error
+    error: Error;
+    attached?: boolean;
 }
 
 export interface IBaseTerminalClient {
@@ -139,54 +123,3 @@ export class DispatchingBaseTerminalClient {
         });
     }
 }
-
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-// some code copied and modified from https://github.com/microsoft/vscode/blob/1.49.0/src/vs/workbench/contrib/terminal/common/environmentVariable.ts
-
-export const ENVIRONMENT_VARIABLE_COLLECTIONS_KEY = 'terminal.integrated.environmentVariableCollections';
-
-export interface EnvironmentVariableCollection {
-    readonly map: ReadonlyMap<string, EnvironmentVariableMutator>;
-}
-
-export interface EnvironmentVariableCollectionWithPersistence extends EnvironmentVariableCollection {
-    readonly persistent: boolean;
-}
-
-export enum EnvironmentVariableMutatorType {
-    Replace = 1,
-    Append = 2,
-    Prepend = 3
-}
-
-export interface EnvironmentVariableMutator {
-    readonly value: string;
-    readonly type: EnvironmentVariableMutatorType;
-}
-
-export interface ExtensionOwnedEnvironmentVariableMutator extends EnvironmentVariableMutator {
-    readonly extensionIdentifier: string;
-}
-
-/**
- * Represents an environment variable collection that results from merging several collections
- * together.
- */
-export interface MergedEnvironmentVariableCollection {
-    readonly map: ReadonlyMap<string, ExtensionOwnedEnvironmentVariableMutator[]>;
-
-    /**
-     * Applies this collection to a process environment.
-     */
-    applyToProcessEnvironment(env: { [key: string]: string | null }): void;
-}
-
-export interface SerializableExtensionEnvironmentVariableCollection {
-    extensionIdentifier: string,
-    collection: SerializableEnvironmentVariableCollection
-}
-
-export type SerializableEnvironmentVariableCollection = [string, EnvironmentVariableMutator][];

@@ -24,7 +24,7 @@ import { clone } from 'dugite-extra/lib/command/clone';
 import { fetch } from 'dugite-extra/lib/command/fetch';
 import { stash } from 'dugite-extra/lib/command/stash';
 import { merge } from 'dugite-extra/lib/command/merge';
-import { FileUri } from '@theia/core/lib/node/file-uri';
+import { FileUri } from '@theia/core/lib/common/file-uri';
 import { getStatus } from 'dugite-extra/lib/command/status';
 import { createCommit } from 'dugite-extra/lib/command/commit';
 import { stage, unstage } from 'dugite-extra/lib/command/stage';
@@ -766,7 +766,8 @@ export class DugiteGit implements Git {
         const out = result.stdout;
         if (out && out.length !== 0) {
             try {
-                return fs.realpathSync(out.trim());
+                const realpath = await fs.realpath(out.trim());
+                return realpath;
             } catch (e) {
                 this.logger.error(e);
                 return undefined;

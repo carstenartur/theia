@@ -37,10 +37,16 @@
       "path": "dev-packages/request"
     },
     {
+      "path": "examples/api-provider-sample"
+    },
+    {
       "path": "examples/api-samples"
     },
     {
       "path": "examples/browser"
+    },
+    {
+      "path": "examples/browser-only"
     },
     {
       "path": "examples/electron"
@@ -62,6 +68,9 @@
     },
     {
       "path": "packages/debug"
+    },
+    {
+      "path": "packages/dev-container"
     },
     {
       "path": "packages/editor"
@@ -109,6 +118,9 @@
       "path": "packages/navigator"
     },
     {
+      "path": "packages/notebook"
+    },
+    {
       "path": "packages/outline-view"
     },
     {
@@ -122,6 +134,9 @@
     },
     {
       "path": "packages/plugin-ext"
+    },
+    {
+      "path": "packages/plugin-ext-headless"
     },
     {
       "path": "packages/plugin-ext-vscode"
@@ -142,6 +157,9 @@
       "path": "packages/property-view"
     },
     {
+      "path": "packages/remote"
+    },
+    {
       "path": "packages/scm"
     },
     {
@@ -158,6 +176,9 @@
     },
     {
       "path": "packages/terminal"
+    },
+    {
+      "path": "packages/test"
     },
     {
       "path": "packages/timeline"

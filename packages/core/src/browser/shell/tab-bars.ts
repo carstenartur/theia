@@ -17,7 +17,7 @@
 import PerfectScrollbar from 'perfect-scrollbar';
 import { TabBar, Title, Widget } from '@phosphor/widgets';
 import { VirtualElement, h, VirtualDOM, ElementInlineStyle } from '@phosphor/virtualdom';
-import { Disposable, DisposableCollection, MenuPath, notEmpty, SelectionService, CommandService, nls } from '../../common';
+import { Disposable, DisposableCollection, MenuPath, notEmpty, SelectionService, CommandService, nls, ArrayUtils } from '../../common';
 import { ContextMenuRenderer } from '../context-menu-renderer';
 import { Signal, Slot } from '@phosphor/signaling';
 import { Message, MessageLoop } from '@phosphor/messaging';
@@ -37,6 +37,9 @@ import { HoverService } from '../hover-service';
 import { Root, createRoot } from 'react-dom/client';
 import { SelectComponent } from '../widgets/select-component';
 import { createElement } from 'react';
+import { PreviewableWidget } from '../widgets/previewable-widget';
+import { EnhancedPreviewWidget } from '../widgets/enhanced-preview-widget';
+import { ContextKeyService } from '../context-key-service';
 
 /** The class name added to hidden content nodes, which are required to render vertical side bars. */
 const HIDDEN_CONTENT_CLASS = 'theia-TabBar-hidden-content';
@@ -100,7 +103,8 @@ export class TabBarRenderer extends TabBar.Renderer {
         protected readonly selectionService?: SelectionService,
         protected readonly commandService?: CommandService,
         protected readonly corePreferences?: CorePreferences,
-        protected readonly hoverService?: HoverService
+        protected readonly hoverService?: HoverService,
+        protected readonly contextKeyService?: ContextKeyService,
     ) {
         super();
         if (this.decoratorService) {
@@ -165,9 +169,11 @@ export class TabBarRenderer extends TabBar.Renderer {
             ? nls.localizeByDefault('Unpin')
             : nls.localizeByDefault('Close');
 
-        const hover = this.tabBar && (this.tabBar.orientation === 'horizontal' && !this.corePreferences?.['window.tabbar.enhancedPreview']) ? { title: title.caption } : {
-            onmouseenter: this.handleMouseEnterEvent
-        };
+        const hover = this.tabBar && (this.tabBar.orientation === 'horizontal' && this.corePreferences?.['window.tabbar.enhancedPreview'] === 'classic')
+            ? { title: title.caption }
+            : {
+                onmouseenter: this.handleMouseEnterEvent
+            };
 
         return h.li(
             {
@@ -184,6 +190,7 @@ export class TabBarRenderer extends TabBar.Renderer {
                 { className: 'theia-tab-icon-label' },
                 this.renderIcon(data, isInSidePanel),
                 this.renderLabel(data, isInSidePanel),
+                this.renderTailDecorations(data, isInSidePanel),
                 this.renderBadge(data, isInSidePanel),
                 this.renderLock(data, isInSidePanel)
             ),
@@ -283,6 +290,37 @@ export class TabBarRenderer extends TabBar.Renderer {
                 h.div({ className: 'p-TabBar-tabLabelDetails', style }, labelDetails));
         }
         return h.div({ className: 'p-TabBar-tabLabel', style }, data.title.label);
+    }
+
+    protected renderTailDecorations(renderData: SideBarRenderData, isInSidePanel?: boolean): VirtualElement[] {
+        if (!this.corePreferences?.get('workbench.editor.decorations.badges')) {
+            return [];
+        }
+        const tailDecorations = ArrayUtils.coalesce(this.getDecorationData(renderData.title, 'tailDecorations')).flat();
+        if (tailDecorations === undefined || tailDecorations.length === 0) {
+            return [];
+        }
+        let dotDecoration: WidgetDecoration.TailDecoration.AnyPartial | undefined;
+        const otherDecorations: WidgetDecoration.TailDecoration.AnyPartial[] = [];
+        tailDecorations.reverse().forEach(decoration => {
+            const partial = decoration as WidgetDecoration.TailDecoration.AnyPartial;
+            if (WidgetDecoration.TailDecoration.isDotDecoration(partial)) {
+                dotDecoration ||= partial;
+            } else if (partial.data || partial.icon || partial.iconClass) {
+                otherDecorations.push(partial);
+            }
+        });
+        const decorationsToRender = dotDecoration ? [dotDecoration, ...otherDecorations] : otherDecorations;
+        return decorationsToRender.map((decoration, index) => {
+            const { tooltip, data, fontData, color, icon, iconClass } = decoration;
+            const iconToRender = icon ?? iconClass;
+            const className = ['p-TabBar-tail', 'flex'].join(' ');
+            const style = fontData ? fontData : color ? { color } : undefined;
+            const content = (data ? data : iconToRender
+                ? h.span({ className: this.getIconClass(iconToRender, iconToRender === 'circle' ? [WidgetDecoration.Styles.DECORATOR_SIZE_CLASS] : []) })
+                : '') + (index !== decorationsToRender.length - 1 ? ',' : '');
+            return h.span({ key: ('tailDecoration_' + index), className, style, title: tooltip ?? content }, content);
+        });
     }
 
     renderBadge(data: SideBarRenderData, isInSidePanel?: boolean): VirtualElement {
@@ -501,7 +539,13 @@ export class TabBarRenderer extends TabBar.Renderer {
         labelElement.classList.add('theia-horizontal-tabBar-hover-title');
         labelElement.textContent = title.label;
         hoverBox.append(labelElement);
-        if (title.caption) {
+        const widget = title.owner;
+        if (EnhancedPreviewWidget.is(widget)) {
+            const enhancedPreviewNode = widget.getEnhancedPreviewNode();
+            if (enhancedPreviewNode) {
+                hoverBox.appendChild(enhancedPreviewNode);
+            }
+        } else if (title.caption) {
             const captionElement = document.createElement('p');
             captionElement.classList.add('theia-horizontal-tabBar-hover-caption');
             captionElement.textContent = title.caption;
@@ -509,6 +553,58 @@ export class TabBarRenderer extends TabBar.Renderer {
         }
         return hoverBox;
     };
+
+    protected renderVisualPreview(desiredWidth: number, title: Title<Widget>): HTMLElement | undefined {
+        const widget = title.owner;
+        // Check that the widget is not currently shown, is a PreviewableWidget and it was already loaded before
+        if (this.tabBar && this.tabBar.currentTitle !== title && PreviewableWidget.isPreviewable(widget)) {
+            const html = document.getElementById(widget.id);
+            if (html) {
+                const previewNode: Node | undefined = widget.getPreviewNode();
+                if (previewNode) {
+                    const clonedNode = previewNode.cloneNode(true);
+                    const visualPreviewDiv = document.createElement('div');
+                    visualPreviewDiv.classList.add('enhanced-preview-container');
+                    // Add the clonedNode and get it from the children to have a HTMLElement instead of a Node
+                    visualPreviewDiv.append(clonedNode);
+                    const visualPreview = visualPreviewDiv.children.item(visualPreviewDiv.children.length - 1);
+                    if (visualPreview instanceof HTMLElement) {
+                        visualPreview.classList.remove('p-mod-hidden');
+                        visualPreview.classList.add('enhanced-preview');
+                        visualPreview.id = `preview:${widget.id}`;
+
+                        // Use the current visible editor as a fallback if not available
+                        const height: number = visualPreview.style.height === '' ? this.tabBar.currentTitle!.owner.node.offsetHeight : parseFloat(visualPreview.style.height);
+                        const width: number = visualPreview.style.width === '' ? this.tabBar.currentTitle!.owner.node.offsetWidth : parseFloat(visualPreview.style.width);
+                        const desiredRatio = 9 / 16;
+                        const desiredHeight = desiredWidth * desiredRatio;
+                        const ratio = height / width;
+                        visualPreviewDiv.style.width = `${desiredWidth}px`;
+                        visualPreviewDiv.style.height = `${desiredHeight}px`;
+
+                        // If the view is wider than the desiredRatio scale the width and crop the height. If the view is longer its the other way around.
+                        const scale = ratio < desiredRatio ? (desiredHeight / height) : (desiredWidth / width);
+                        visualPreview.style.transform = `scale(${scale},${scale})`;
+                        visualPreview.style.removeProperty('top');
+                        visualPreview.style.removeProperty('left');
+
+                        // Copy canvases (They are cloned empty)
+                        const originalCanvases = html.getElementsByTagName('canvas');
+                        const previewCanvases = visualPreview.getElementsByTagName('canvas');
+                        // If this is not given, something went wrong during the cloning
+                        if (originalCanvases.length === previewCanvases.length) {
+                            for (let i = 0; i < originalCanvases.length; i++) {
+                                previewCanvases[i].getContext('2d')?.drawImage(originalCanvases[i], 0, 0);
+                            }
+                        }
+
+                        return visualPreviewDiv;
+                    }
+                }
+            }
+        }
+        return undefined;
+    }
 
     protected handleMouseEnterEvent = (event: MouseEvent) => {
         if (this.tabBar && this.hoverService && event.currentTarget instanceof HTMLElement) {
@@ -520,7 +616,8 @@ export class TabBarRenderer extends TabBar.Renderer {
                         content: this.renderEnhancedPreview(title),
                         target: event.currentTarget,
                         position: 'bottom',
-                        cssClasses: ['extended-tab-preview']
+                        cssClasses: ['extended-tab-preview'],
+                        visualPreview: this.corePreferences?.['window.tabbar.enhancedPreview'] === 'visual' ? width => this.renderVisualPreview(width, title) : undefined
                     });
                 } else {
                     this.hoverService.requestHover({
@@ -551,10 +648,12 @@ export class TabBarRenderer extends TabBar.Renderer {
                 this.selectionService.selection = NavigatableWidget.is(widget) ? { uri: widget.getResourceUri() } : widget;
             }
 
+            const contextKeyServiceOverlay = this.contextKeyService?.createOverlay([['isTerminalTab', widget && 'terminalId' in widget]]);
             this.contextMenuRenderer.render({
                 menuPath: this.contextMenuPath!,
                 anchor: event,
                 args: [event],
+                contextKeyService: contextKeyServiceOverlay,
                 // We'd like to wait until the command triggered by the context menu has been run, but this should let it get through the preamble, at least.
                 onHide: () => setTimeout(() => { if (this.selectionService) { this.selectionService.selection = oldSelection; } })
             });
@@ -904,7 +1003,7 @@ export class ToolbarAwareTabBar extends ScrollableTabBar {
 
     protected override onBeforeDetach(msg: Message): void {
         if (this.toolbar && this.toolbar.isAttached) {
-            Widget.detach(this.toolbar);
+            this.toolbar.dispose();
         }
         super.onBeforeDetach(msg);
     }

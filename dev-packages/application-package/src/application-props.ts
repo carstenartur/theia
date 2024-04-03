@@ -32,7 +32,8 @@ export interface ApplicationConfig {
 export type ElectronFrontendApplicationConfig = RequiredRecursive<ElectronFrontendApplicationConfig.Partial>;
 export namespace ElectronFrontendApplicationConfig {
     export const DEFAULT: ElectronFrontendApplicationConfig = {
-        windowOptions: {}
+        windowOptions: {},
+        showWindowEarly: true
     };
     export interface Partial {
 
@@ -42,6 +43,13 @@ export namespace ElectronFrontendApplicationConfig {
          * Defaults to `{}`.
          */
         readonly windowOptions?: BrowserWindowConstructorOptions;
+
+        /**
+         * Whether or not to show an empty Electron window as early as possible.
+         *
+         * Defaults to `true`.
+         */
+        readonly showWindowEarly?: boolean;
     }
 }
 
@@ -60,6 +68,11 @@ export namespace DefaultTheme {
         }
         return theme.light;
     }
+    export function defaultBackgroundColor(dark?: boolean): string {
+        // The default light background color is based on the `colors#editor.background` value from
+        // `packages/monaco/data/monaco-themes/vscode/dark_vs.json` and the dark background comes from the `light_vs.json`.
+        return dark ? '#1E1E1E' : '#FFFFFF';
+    }
 }
 
 /**
@@ -73,7 +86,8 @@ export namespace FrontendApplicationConfig {
         defaultIconTheme: 'theia-file-icons',
         electron: ElectronFrontendApplicationConfig.DEFAULT,
         defaultLocale: '',
-        validatePreferencesSchema: true
+        validatePreferencesSchema: true,
+        reloadOnReconnect: false
     };
     export interface Partial extends ApplicationConfig {
 
@@ -119,6 +133,12 @@ export namespace FrontendApplicationConfig {
          * Defaults to `true`.
          */
         readonly validatePreferencesSchema?: boolean;
+
+        /**
+         * When 'true', the window will reload in case the front end reconnects to a back-end,
+         * but the back end does not have a connection context for this front end anymore.
+         */
+        readonly reloadOnReconnect?: boolean;
     }
 }
 
@@ -129,6 +149,7 @@ export type BackendApplicationConfig = RequiredRecursive<BackendApplicationConfi
 export namespace BackendApplicationConfig {
     export const DEFAULT: BackendApplicationConfig = {
         singleInstance: false,
+        frontendConnectionTimeout: 0
     };
     export interface Partial extends ApplicationConfig {
 
@@ -138,6 +159,11 @@ export namespace BackendApplicationConfig {
          * Defaults to `false`.
          */
         readonly singleInstance?: boolean;
+
+        /**
+         * The time in ms the connection context will be preserved for reconnection after a front end disconnects.
+         */
+        readonly frontendConnectionTimeout?: number;
     }
 }
 
@@ -215,10 +241,11 @@ export interface ApplicationProps extends NpmRegistryProps {
     };
 }
 export namespace ApplicationProps {
-    export type Target = keyof typeof ApplicationTarget;
+    export type Target = `${ApplicationTarget}`;
     export enum ApplicationTarget {
         browser = 'browser',
-        electron = 'electron'
+        electron = 'electron',
+        browserOnly = 'browser-only'
     };
     export const DEFAULT: ApplicationProps = {
         ...NpmRegistryProps.DEFAULT,

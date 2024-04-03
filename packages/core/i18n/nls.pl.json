@@ -1,5 +1,9 @@
 {
   "debug.breakpoint.editCondition": "Warunek edycji...",
+  "notebook.cell.insertMarkdownCellAbove": "Wstaw komórkę Markdown powyżej",
+  "notebook.cell.insertMarkdownCellBelow": "Wstaw komórkę Markdown poniżej",
+  "notebook.cell.to-code-cell": "Zmień komórkę na kod",
+  "notebook.cell.to-markdown-cell": "Zmień komórkę na Mardown",
   "terminal:new:profile": "Tworzenie nowego zintegrowanego terminalu z profilu",
   "terminal:profile:default": "Wybierz domyślny profil terminala",
   "theia": {
@@ -30,7 +34,14 @@
         "showPreviousTabInGroup": "Przełączanie do poprzedniej karty w grupie",
         "toggleMaximized": "Przełącz maksymalny"
       },
-      "enhancedPreview": "Kontroluje, czy więcej informacji o zakładce ma być wyświetlanych w poziomych paskach zakładek.",
+      "copyInfo": "Najpierw otwórz plik, aby skopiować jego ścieżkę",
+      "copyWarn": "Użyj polecenia kopiowania lub skrótu przeglądarki.",
+      "cutWarn": "Użyj polecenia \"wytnij\" lub skrótu przeglądarki.",
+      "enhancedPreview": {
+        "classic": "Wyświetla prosty podgląd karty z podstawowymi informacjami.",
+        "enhanced": "Wyświetla rozszerzony podgląd karty z dodatkowymi informacjami.",
+        "visual": "Wyświetla wizualny podgląd karty."
+      },
       "file": {
         "browse": "Przeglądaj stronę"
       },
@@ -50,12 +61,20 @@
         "clipboardWarnFirefox": "Interfejs API schowka nie jest dostępny. Można go włączyć za pomocą opcji '{0}' na stronie '{1}'. Następnie należy ponownie załadować Theia. Uwaga, pozwoli to FireFox uzyskać pełny dostęp do schowka systemowego."
       },
       "offline": "Offline",
+      "pasteWarn": "Użyj polecenia wklejania lub skrótu przeglądarki.",
       "quitMessage": "Wszelkie niezapisane zmiany nie zostaną zapisane.",
       "resetWorkbenchLayout": "Resetuj układ stołu warsztatowego",
       "searchbox": {
         "close": "Zamknij (Ucieczka)",
         "next": "Następny (w dół)",
         "previous": "Poprzedni (Up)"
+      },
+      "secondaryWindow": {
+        "alwaysOnTop": "Po włączeniu tej opcji okno dodatkowe pozostaje nad wszystkimi innymi oknami, w tym nad oknami różnych aplikacji.",
+        "description": "Ustawia początkową pozycję i rozmiar wyodrębnionego okna pomocniczego.",
+        "fullSize": "Pozycja i rozmiar wyodrębnionego widżetu będą takie same jak uruchomionej aplikacji Theia.",
+        "halfWidth": "Pozycja i rozmiar wyodrębnionego widżetu będą równe połowie szerokości uruchomionej aplikacji Theia.",
+        "originalSize": "Pozycja i rozmiar wyodrębnionego widżetu będą takie same jak oryginalnego widżetu."
       },
       "silentNotifications": "Określa, czy wyłączyć wyskakujące okienka powiadomień.",
       "tabDefaultSize": "Określa domyślny rozmiar dla zakładek.",
@@ -65,25 +84,47 @@
     },
     "debug": {
       "addConfigurationPlaceholder": "Wybierz główny obszar roboczy, do którego chcesz dodać konfigurację",
+      "breakpoint": "punkt przerwania",
       "compound-cycle": "Konfiguracja startowa \"{0}\" zawiera cykl z samym sobą",
       "continueAll": "Kontynuuj Wszystko",
       "copyExpressionValue": "Kopiuj wartość wyrażenia",
+      "dataBreakpoint": "punkt przerwania danych",
       "debugVariableInput": "Ustaw {0} Wartość",
+      "entry": "wejście",
+      "exception": "wyjątek",
+      "functionBreakpoint": "punkt przerwania funkcji",
+      "goto": "goto",
       "instruction-breakpoint": "Punkt przerwania instrukcji",
+      "instructionBreakpoint": "punkt przerwania instrukcji",
       "missingConfiguration": "Brak konfiguracji dynamicznej \"{0}:{1}\" lub nie ma ona zastosowania.",
+      "pause": "pauza",
       "pauseAll": "Pauza Wszystkie",
       "reveal": "Ujawnij",
+      "step": "krok",
       "threads": "Nici",
       "toggleTracing": "Włączanie/wyłączanie śledzenia komunikacji z adapterami debugowania"
     },
     "editor": {
+      "diffEditor.wordWrap2": "Linie będą zawijane zgodnie z ustawieniem `#editor.wordWrap#`.",
       "dirtyEncoding": "Plik jest zabrudzony. Proszę zapisać go najpierw przed ponownym otwarciem z innym kodowaniem.",
-      "editor.codeActionWidget.showHeaders": "Włączenie/wyłączenie pokazywania nagłówków grup w menu akcji kodu.",
+      "editor.accessibilitySupport0": "Użyj interfejsów API platformy, aby wykryć podłączenie czytnika ekranu.",
+      "editor.accessibilitySupport1": "Optymalizacja pod kątem korzystania z czytnika ekranu",
+      "editor.accessibilitySupport2": "Załóżmy, że czytnik ekranu nie jest podłączony",
+      "editor.bracketPairColorization.enabled": "Kontroluje, czy kolorowanie par nawiasów jest włączone, czy nie. Użyj `#workbench.colorCustomizations#`, aby zastąpić kolory podświetlenia nawiasów.",
+      "editor.codeActionWidget.includeNearbyQuickfixes": "Włączenie/wyłączenie wyświetlania najbliższego quickfixa w linii, gdy nie jest on aktualnie w diagnostyce.",
+      "editor.detectIndentation": "Kontroluje, czy `#editor.tabSize#` i `#editor.insertSpaces#` będą automatycznie wykrywane podczas otwierania pliku na podstawie jego zawartości.",
       "editor.formatOnSaveMode.modificationsIfAvailable": "Spowoduje próbę sformatowania tylko modyfikacji (wymaga kontroli źródła). Jeśli kontrola źródła nie może być użyta, sformatowany zostanie cały plik.",
+      "editor.hover.hidingDelay": "Kontroluje opóźnienie w milisekundach, po którym hover zostanie ukryty. Wymaga włączenia `editor.hover.sticky`.",
       "editor.inlayHints.enabled1": "Podpowiedzi są domyślnie wyświetlane i ukrywają się po przytrzymaniu `Ctrl+Alt`.",
       "editor.inlayHints.enabled2": "Podpowiedzi są domyślnie ukryte i pokazują się po przytrzymaniu `Ctrl+Alt`.",
+      "editor.inlayHints.fontFamily": "Kontroluje rodzinę czcionek podpowiedzi inlay w edytorze. Gdy ustawiona na pustą, używana jest `#editor.fontFamily#`.",
+      "editor.inlayHints.fontSize": "Kontroluje rozmiar czcionki podpowiedzi inlay w edytorze. Domyślnie używana jest wartość `#editor.fontSize#`, gdy skonfigurowana wartość jest mniejsza niż `5` lub większa niż rozmiar czcionki edytora.",
+      "editor.insertSpaces": "Wstawia spacje po naciśnięciu `Tab`. To ustawienie jest nadpisywane na podstawie zawartości pliku, gdy włączona jest funkcja `#editor.detectIndentation#`.",
       "editor.quickSuggestions": "Kontroluje czy sugestie powinny być automatycznie wyświetlane podczas pisania. Można to kontrolować w przypadku wpisywania komentarzy, ciągów znaków i innego kodu. Szybkie sugestie mogą być skonfigurowane tak, aby pokazywały się jako tekst widma lub z widżetem sugestii. Należy również pamiętać o ustawieniu '#editor.suggestOnTriggerCharacters#', które kontroluje czy sugestie są uruchamiane przez znaki specjalne.",
-      "editor.suggest.matchOnWordStartOnly": "Kiedy włączone filtrowanie IntelliSense wymaga, aby pierwszy znak pasował na początku słowa, np. `c` na `Console` lub `WebContext` ale _nie_ na `description`. Kiedy wyłączone IntelliSense pokaże więcej wyników, ale nadal sortuje je według jakości dopasowania.",
+      "editor.stickyScroll.scrollWithEditor": "Włącza przewijanie widżetu sticky scroll za pomocą poziomego paska przewijania edytora.",
+      "editor.suggestFontSize": "Rozmiar czcionki dla widżetu sugestii. Gdy ustawione na `0`, używana jest wartość `#editor.fontSize#`.",
+      "editor.suggestLineHeight": "Wysokość linii dla widżetu sugestii. Gdy ustawione na `0`, używana jest wartość `#editor.lineHeight#`. Minimalna wartość to 8.",
+      "editor.tabSize": "Liczba spacji równa tabulatorowi. To ustawienie jest nadpisywane na podstawie zawartości pliku, gdy włączona jest funkcja `#editor.detectIndentation#`.",
       "files.autoSave": "Steruje funkcją [automatycznego zapisywania](https://code.visualstudio.com/docs/editor/codebasics#_save-auto-save) edytorów, w których nie zapisano zmian.",
       "files.autoSave.afterDelay": "Edytor ze zmianami jest automatycznie zapisywany po upływie skonfigurowanego czasu `#files.autoSaveDelay#`.",
       "files.autoSave.off": "Edytor ze zmianami nigdy nie jest automatycznie zapisywany.",
@@ -108,6 +149,7 @@
       }
     },
     "filesystem": {
+      "copiedToClipboard": "Skopiowałem link do pobrania do schowka.",
       "copyDownloadLink": "Kopiuj Link do pobrania",
       "dialog": {
         "initialLocation": "Przejdź do lokalizacji początkowej",
@@ -137,12 +179,15 @@
     "getting-started": {
       "apiComparator": "{0} Zgodność z API",
       "newExtension": "Budowanie nowego rozszerzenia",
-      "newPlugin": "Tworzenie nowego pluginu"
+      "newPlugin": "Tworzenie nowego pluginu",
+      "startup-editor": {
+        "welcomePage": "Otwórz stronę powitalną, zawierającą treści ułatwiające rozpoczęcie korzystania z witryny {0} i rozszerzeń."
+      }
     },
     "git": {
       "aFewSecondsAgo": "kilka sekund temu",
       "addSignedOff": "Dodaj podpisane przez",
-      "amendReuseMessag": "Aby ponownie użyć ostatniego komunikatu commit, należy nacisnąć 'Enter' lub 'Escape', aby anulować.",
+      "amendReuseMessage": "Aby ponownie użyć ostatniego komunikatu commit, należy nacisnąć 'Enter' lub 'Escape', aby anulować.",
       "amendRewrite": "Ponownie napisać poprzednią wiadomość. Wcisnąć 'Enter', aby potwierdzić lub 'Escape', aby anulować.",
       "checkoutCreateLocalBranchWithName": "Utworzyć nowy oddział lokalny o nazwie: {0}. Wcisnąć 'Enter', aby potwierdzić lub 'Escape', aby anulować.",
       "checkoutProvideBranchName": "Proszę podać nazwę oddziału.",
@@ -174,7 +219,18 @@
       "deprecation": "Zamiast tego użyj klauzuli `when`."
     },
     "keymaps": {
+      "addKeybindingTitle": "Dodaj powiązanie klawiszy dla {0}",
+      "editKeybinding": "Edytuj powiązanie klawiszy...",
       "editKeybindingTitle": "Edytuj przypisanie klawiszy dla {0}",
+      "editWhenExpression": "Edit When Expression...",
+      "editWhenExpressionTitle": "Edytuj, gdy wyrażenie dla {0}",
+      "keybinding": {
+        "copy": "Kopiowanie powiązań klawiszy",
+        "copyCommandId": "Identyfikator polecenia kopiowania powiązania klawiszy",
+        "copyCommandTitle": "Tytuł polecenia kopiowania powiązania klawiszy",
+        "edit": "Edytuj powiązanie klawiszy...",
+        "editWhenExpression": "Edytuj powiązanie klawiszy, gdy wyrażenie..."
+      },
       "keybindingCollidesValidation": "przypisanie klawiszy aktualnie koliduje",
       "requiredKeybindingValidation": "wymagana jest wartość wiązania klawiszy",
       "resetKeybindingConfirmation": "Czy naprawdę chcesz przywrócić domyślną wartość tego powiązania klawiszy?",
@@ -216,6 +272,7 @@
         "offset-title": "Bajty do przesunięcia pamięci z {0}"
       },
       "editable": {
+        "apply": "Zastosuj zmiany",
         "clear": "Wyraźne zmiany"
       },
       "endianness": "Endianness",
@@ -279,6 +336,7 @@
       "autoReveal": "Auto ujawnienie",
       "clipboardWarn": "Dostęp do schowka jest zablokowany. Sprawdź uprawnienia przeglądarki.",
       "clipboardWarnFirefox": "Interfejs API schowka nie jest dostępny. Można go włączyć za pomocą opcji '{0}' na stronie '{1}'. Następnie należy ponownie załadować Theia. Uwaga, pozwoli to FireFox uzyskać pełny dostęp do schowka systemowego.",
+      "noFolderOpened": "Folder nie został otwarty",
       "refresh": "Odśwież w Eksploratorze",
       "reveal": "Ujawnij w Eksploratorze",
       "toggleHiddenFiles": "Przełącz ukryte pliki"
@@ -323,6 +381,9 @@
       "watchMode": "Uruchom strażnika na opracowywanym pluginie"
     },
     "plugin-ext": {
+      "authentication-main": {
+        "loginTitle": "Login"
+      },
       "plugins": "Wtyczki",
       "webviewTrace": "Kontroluje śledzenie komunikacji z webviews.",
       "webviewWarnIfUnsecure": "Ostrzega użytkowników, że widoki internetowe są obecnie wdrażane w sposób niezabezpieczony."
@@ -364,8 +425,7 @@
       "extract-widget": "Przenieś widok do okna podrzędnego"
     },
     "shell-area": {
-      "secondary": "Drugie okno",
-      "top": "Top"
+      "secondary": "Drugie okno"
     },
     "task": {
       "attachTask": "Dołącz zadanie...",
@@ -385,6 +445,7 @@
       "profilePath": "Ścieżka powłoki, której używa ten profil.",
       "profiles": "Profile, które mają być prezentowane podczas tworzenia nowego terminala. Ustaw właściwość path ręcznie z opcjonalnymi argumentami.\nUstaw istniejący profil na `null`, aby ukryć profil z listy, na przykład: `\"{0}\": null`.",
       "rendererType": "Kontroluje sposób renderowania terminala.",
+      "rendererTypeDeprecationMessage": "Typ renderowania nie jest już obsługiwany jako opcja.",
       "selectProfile": "Wybrać profil dla nowego terminalu",
       "shell.deprecated": "Jest to przestarzałe, nowym zalecanym sposobem konfiguracji domyślnej powłoki jest utworzenie profilu terminala w 'terminal.integrated.profiles.{0}' i ustawienie jego nazwy jako domyślnej w 'terminal.integrated.defaultProfile.{0}.'",
       "shellArgsLinux": "Argumenty wiersza poleceń do użycia w terminalu Linuksa.",
@@ -393,6 +454,11 @@
       "shellLinux": "Ścieżka do powłoki, z której korzysta terminal na Linuksie (domyślnie: '{0}'}).",
       "shellOsx": "Ścieżka do powłoki, z której korzysta terminal na macOS (domyślnie: '{0}'}).",
       "shellWindows": "Ścieżka do powłoki, której terminal używa na Windows. (domyślnie: '{0}')."
+    },
+    "test": {
+      "cancelAllTestRuns": "Anulowanie wszystkich testów",
+      "testRunDefaultName": "{0} bieg {1}",
+      "testRuns": "Przebiegi testowe"
     },
     "toolbar": {
       "addCommand": "Dodaj polecenie do paska narzędzi",
@@ -419,11 +485,16 @@
       "supertypeHierarchy": "Hierarchia nadtypów"
     },
     "vsx-registry": {
+      "confirmDialogMessage": "Rozszerzenie \"{0}\" jest niezweryfikowane i może stanowić zagrożenie dla bezpieczeństwa.",
+      "confirmDialogTitle": "Czy na pewno chcesz kontynuować instalację?",
       "downloadCount": "Pobierz licz: {0}",
       "errorFetching": "Błąd pobierania rozszerzeń.",
+      "errorFetchingConfigurationHint": "Może to być spowodowane problemami z konfiguracją sieci.",
       "failedInstallingVSIX": "Nie udało się zainstalować {0} z VSIX.",
       "invalidVSIX": "Wybrany plik nie jest prawidłowym pluginem \"*.vsix\".",
       "license": "Licencja: {0}",
+      "onlyShowVerifiedExtensionsDescription": "Dzięki temu strona {0} będzie wyświetlać tylko zweryfikowane rozszerzenia.",
+      "onlyShowVerifiedExtensionsTitle": "Pokaż tylko zweryfikowane rozszerzenia",
       "recommendedExtensions": "Lista nazw rozszerzeń zalecanych do użycia w tym obszarze roboczym.",
       "searchPlaceholder": "Wyszukaj rozszerzenia w {0}.",
       "showInstalled": "Pokaż zainstalowane rozszerzenia",

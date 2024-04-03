@@ -24,6 +24,9 @@
       "path": "../../packages/debug"
     },
     {
+      "path": "../../packages/dev-container"
+    },
+    {
       "path": "../../packages/editor"
     },
     {
@@ -66,6 +69,9 @@
       "path": "../../packages/navigator"
     },
     {
+      "path": "../../packages/notebook"
+    },
+    {
       "path": "../../packages/outline-view"
     },
     {
@@ -76,6 +82,9 @@
     },
     {
       "path": "../../packages/plugin-ext"
+    },
+    {
+      "path": "../../packages/plugin-ext-headless"
     },
     {
       "path": "../../packages/plugin-ext-vscode"
@@ -96,6 +105,9 @@
       "path": "../../packages/property-view"
     },
     {
+      "path": "../../packages/remote"
+    },
+    {
       "path": "../../packages/scm"
     },
     {
@@ -112,6 +124,9 @@
     },
     {
       "path": "../../packages/terminal"
+    },
+    {
+      "path": "../../packages/test"
     },
     {
       "path": "../../packages/timeline"
@@ -133,6 +148,9 @@
     },
     {
       "path": "../../packages/workspace"
+    },
+    {
+      "path": "../api-provider-sample"
     },
     {
       "path": "../api-samples"

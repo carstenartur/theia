@@ -41,13 +41,16 @@ export type InternalMenuDto = Omit<MenuDto, 'execute' | 'submenu'> & {
 export type WindowEvent = 'maximize' | 'unmaximize' | 'focus';
 
 export interface TheiaCoreAPI {
+    WindowMetadata: {
+        webcontentId: string;
+    }
     getSecurityToken: () => string;
     attachSecurityToken: (endpoint: string) => Promise<void>;
 
     setMenuBarVisible(visible: boolean, windowName?: string): void;
     setMenu(menu: MenuDto[] | undefined): void;
 
-    popup(menu: MenuDto[], x: number, y: number, onClosed: () => void): Promise<number>;
+    popup(menu: MenuDto[], x: number, y: number, onClosed: () => void, windowName?: string): Promise<number>;
     closePopup(handle: number): void;
 
     focusWindow(name: string): void;
@@ -56,12 +59,14 @@ export interface TheiaCoreAPI {
 
     getTitleBarStyleAtStartup(): Promise<string>;
     setTitleBarStyle(style: string): void;
+    setBackgroundColor(backgroundColor: string): void;
     minimize(): void;
     isMaximized(): boolean; // TODO: this should really be async, since it blocks the renderer process
     maximize(): void;
     unMaximize(): void;
     close(): void;
     onWindowEvent(event: WindowEvent, handler: () => void): Disposable;
+    onAboutToClose(handler: () => void): Disposable;
     setCloseRequestHandler(handler: (reason: StopReason) => Promise<boolean>): void;
 
     setSecondaryWindowCloseRequestHandler(windowName: string, handler: () => Promise<boolean>): void;
@@ -86,6 +91,7 @@ export interface TheiaCoreAPI {
 
     sendData(data: Uint8Array): void;
     onData(handler: (data: Uint8Array) => void): Disposable;
+    useNativeElements: boolean;
 }
 
 declare global {
@@ -94,6 +100,7 @@ declare global {
     }
 }
 
+export const CHANNEL_WC_METADATA = 'WebContentMetadata';
 export const CHANNEL_SET_MENU = 'SetMenu';
 export const CHANNEL_SET_MENU_BAR_VISIBLE = 'SetMenuBarVisible';
 export const CHANNEL_INVOKE_MENU = 'InvokeMenu';
@@ -109,10 +116,13 @@ export const CHANNEL_ATTACH_SECURITY_TOKEN = 'AttachSecurityToken';
 
 export const CHANNEL_GET_TITLE_STYLE_AT_STARTUP = 'GetTitleStyleAtStartup';
 export const CHANNEL_SET_TITLE_STYLE = 'SetTitleStyle';
+export const CHANNEL_SET_BACKGROUND_COLOR = 'SetBackgroundColor';
 export const CHANNEL_CLOSE = 'Close';
 export const CHANNEL_MINIMIZE = 'Minimize';
 export const CHANNEL_MAXIMIZE = 'Maximize';
 export const CHANNEL_IS_MAXIMIZED = 'IsMaximized';
+
+export const CHANNEL_ABOUT_TO_CLOSE = 'AboutToClose';
 
 export const CHANNEL_UNMAXIMIZE = 'UnMaximize';
 export const CHANNEL_ON_WINDOW_EVENT = 'OnWindowEvent';

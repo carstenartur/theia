@@ -43,6 +43,8 @@ import { LabelProvider } from '../label-provider';
 import { CorePreferences } from '../core-preferences';
 import { TreeFocusService } from './tree-focus-service';
 import { useEffect } from 'react';
+import { PreferenceService, PreferenceChange } from '../preferences';
+import { PREFERENCE_NAME_TREE_INDENT } from './tree-preference';
 
 const debounce = require('lodash.debounce');
 
@@ -73,8 +75,7 @@ export interface TreeProps {
     readonly contextMenuPath?: MenuPath;
 
     /**
-     * The size of the padding (in pixels) per hierarchy depth. The root element won't have left padding but
-     * the padding for the children will be calculated as `leftPadding * hierarchyDepth` and so on.
+     * The size of the padding (in pixels) for the root node of the tree.
      */
     readonly leftPadding: number;
 
@@ -174,6 +175,9 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     @inject(SelectionService)
     protected readonly selectionService: SelectionService;
 
+    @inject(PreferenceService)
+    protected readonly preferenceService: PreferenceService;
+
     @inject(LabelProvider)
     protected readonly labelProvider: LabelProvider;
 
@@ -181,6 +185,8 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     protected readonly corePreferences: CorePreferences;
 
     protected shouldScrollToRow = true;
+
+    protected treeIndent: number = 8;
 
     constructor(
         @inject(TreeProps) readonly props: TreeProps,
@@ -198,6 +204,7 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
 
     @postConstruct()
     protected init(): void {
+        this.treeIndent = this.preferenceService.get(PREFERENCE_NAME_TREE_INDENT, this.treeIndent);
         if (this.props.search) {
             this.searchBox = this.searchBoxFactory({ ...SearchBoxProps.DEFAULT, showButtons: true, showFilter: true });
             this.searchBox.node.addEventListener('focus', () => {
@@ -243,12 +250,16 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
                 }),
             ]);
         }
+        this.node.addEventListener('mousedown', this.handleMiddleClickEvent.bind(this));
+        this.node.addEventListener('mouseup', this.handleMiddleClickEvent.bind(this));
+        this.node.addEventListener('auxclick', this.handleMiddleClickEvent.bind(this));
         this.toDispose.pushAll([
             this.model,
             this.model.onChanged(() => this.updateRows()),
             this.model.onSelectionChanged(() => this.scheduleUpdateScrollToRow({ resize: false })),
             this.focusService.onDidChangeFocus(() => this.scheduleUpdateScrollToRow({ resize: false })),
             this.model.onDidChangeBusy(() => this.update()),
+            this.model.onDidUpdate(() => this.update()),
             this.model.onNodeRefreshed(() => this.updateDecorations()),
             this.model.onExpansionChanged(() => this.updateDecorations()),
             this.decoratorService,
@@ -259,6 +270,12 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
                         this.update();
                         return;
                     }
+                }
+            }),
+            this.preferenceService.onPreferenceChanged((event: PreferenceChange) => {
+                if (event.preferenceName === PREFERENCE_NAME_TREE_INDENT) {
+                    this.treeIndent = event.newValue;
+                    this.update();
                 }
             })
         ]);
@@ -576,6 +593,40 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     }
 
     /**
+     * Render the node expansion toggle.
+     * @param node the tree node.
+     * @param props the node properties.
+     */
+    protected renderCheckbox(node: TreeNode, props: NodeProps): React.ReactNode {
+        if (node.checkboxInfo === undefined) {
+            // eslint-disable-next-line no-null/no-null
+            return null;
+        }
+        return <input data-node-id={node.id}
+            readOnly
+            type='checkbox'
+            checked={!!node.checkboxInfo.checked}
+            title={node.checkboxInfo.tooltip}
+            aria-label={node.checkboxInfo.accessibilityInformation?.label}
+            role={node.checkboxInfo.accessibilityInformation?.role}
+            className='theia-input'
+            onClick={event => this.toggleChecked(event)} />;
+    }
+
+    protected toggleChecked(event: React.MouseEvent<HTMLElement>): void {
+        const nodeId = event.currentTarget.getAttribute('data-node-id');
+        if (nodeId) {
+            const node = this.model.getNode(nodeId);
+            if (node) {
+                this.model.markAsChecked(node, !node.checkboxInfo!.checked);
+            } else {
+                this.handleClickEvent(node, event);
+            }
+        }
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    /**
      * Render the tree node caption given the node properties.
      * @param node the tree node.
      * @param props the node properties.
@@ -856,20 +907,31 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
         let current: TreeNode | undefined = node;
         let depth = props.depth;
         while (current && depth) {
-            const classNames: string[] = [TREE_NODE_INDENT_GUIDE_CLASS];
-            if (this.needsActiveIndentGuideline(current)) {
-                classNames.push('active');
-            } else {
-                classNames.push(renderIndentGuides === 'onHover' ? 'hover' : 'always');
+            if (this.shouldRenderIndent(current)) {
+                const classNames: string[] = [TREE_NODE_INDENT_GUIDE_CLASS];
+                if (this.needsActiveIndentGuideline(current)) {
+                    classNames.push('active');
+                } else {
+                    classNames.push(renderIndentGuides === 'onHover' ? 'hover' : 'always');
+                }
+                const paddingLeft = this.getDepthPadding(depth);
+                indentDivs.unshift(<div key={depth} className={classNames.join(' ')} style={{
+                    paddingLeft: `${paddingLeft}px`
+                }} />);
+                depth--;
             }
-            const paddingLeft = this.getDepthPadding(depth);
-            indentDivs.unshift(<div key={depth} className={classNames.join(' ')} style={{
-                paddingLeft: `${paddingLeft}px`
-            }} />);
             current = current.parent;
-            depth--;
         }
         return indentDivs;
+    }
+
+    /**
+     * Determines whether an indentation div should be rendered for the specified tree node.
+     * If there are multiple tree nodes inside of a single rendered row,
+     * this method should only return true for the first node.
+     */
+    protected shouldRenderIndent(node: TreeNode): boolean {
+        return true;
     }
 
     protected needsActiveIndentGuideline(node: TreeNode): boolean {
@@ -902,6 +964,7 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
         const attributes = this.createNodeAttributes(node, props);
         const content = <div className={TREE_NODE_CONTENT_CLASS}>
             {this.renderExpansionToggle(node, props)}
+            {this.renderCheckbox(node, props)}
             {this.decorateIcon(node, this.renderIcon(node, props))}
             {this.renderCaptionAffixes(node, props, 'captionPrefixes')}
             {this.renderCaption(node, props)}
@@ -924,6 +987,7 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
             style,
             onClick: event => this.handleClickEvent(node, event),
             onDoubleClick: event => this.handleDblClickEvent(node, event),
+            onAuxClick: event => this.handleAuxClickEvent(node, event),
             onContextMenu: event => this.handleContextMenuEvent(node, event),
         };
     }
@@ -1176,12 +1240,15 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
 
     /**
      * Handle the `space key` keyboard event.
-     * - By default should be similar to a single-click action.
+     * - If the element has a checkbox, it will be toggled.
+     * - Otherwise, it should be similar to a single-click action.
      * @param event the `space key` keyboard event.
      */
     protected handleSpace(event: KeyboardEvent): void {
         const { focusedNode } = this.focusService;
-        if (!this.props.multiSelect || (!event.ctrlKey && !event.metaKey && !event.shiftKey)) {
+        if (focusedNode && focusedNode.checkboxInfo) {
+            this.model.markAsChecked(focusedNode, !focusedNode.checkboxInfo.checked);
+        } else if (!this.props.multiSelect || (!event.ctrlKey && !event.metaKey && !event.shiftKey)) {
             this.tapNode(focusedNode);
         }
     }
@@ -1236,6 +1303,32 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     protected handleDblClickEvent(node: TreeNode | undefined, event: React.MouseEvent<HTMLElement>): void {
         this.model.openNode(node);
         event.stopPropagation();
+    }
+
+    /**
+     * Handle the middle-click mouse event.
+     * @param node the tree node if available.
+     * @param event the middle-click mouse event.
+     */
+    protected handleAuxClickEvent(node: TreeNode | undefined, event: React.MouseEvent<HTMLElement>): void {
+        if (event.button === 1) {
+            this.model.openNode(node);
+            if (SelectableTreeNode.is(node)) {
+                this.model.selectNode(node);
+            }
+        }
+        event.stopPropagation();
+    }
+
+    /**
+     * Handle the middle-click mouse event.
+     * @param event the middle-click mouse event.
+     */
+    protected handleMiddleClickEvent(event: MouseEvent): void {
+        // Prevents auto-scrolling behavior when middle-clicking.
+        if (event.button === 1) {
+            event.preventDefault();
+        }
     }
 
     /**
@@ -1420,7 +1513,10 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
         return this.labelProvider.getLongName(node);
     }
     protected getDepthPadding(depth: number): number {
-        return depth * this.props.leftPadding;
+        if (depth === 1) {
+            return this.props.leftPadding;
+        }
+        return depth * this.treeIndent;
     }
 }
 export namespace TreeWidget {

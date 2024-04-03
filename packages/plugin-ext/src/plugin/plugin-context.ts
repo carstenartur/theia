@@ -57,6 +57,7 @@ import {
     StatusBarAlignment,
     RelativePattern,
     IndentAction,
+    SyntaxTokenType,
     CompletionItem,
     CompletionItemKind,
     CompletionList,
@@ -86,6 +87,7 @@ import {
     InlineValueContext,
     DocumentHighlightKind,
     DocumentHighlight,
+    MultiDocumentHighlight,
     DocumentLink,
     DocumentDropEdit,
     CodeLens,
@@ -98,6 +100,7 @@ import {
     DataTransfer,
     TreeItem,
     TreeItemCollapsibleState,
+    TreeItemCheckboxState,
     DocumentSymbol,
     SymbolTag,
     WorkspaceEdit,
@@ -160,13 +163,12 @@ import {
     TerminalLocation,
     TerminalExitReason,
     TerminalProfile,
-    TerminalQuickFixType,
     InlayHint,
     InlayHintKind,
     InlayHintLabelPart,
     TelemetryTrustedValue,
-    NotebookCell,
     NotebookCellKind,
+    NotebookCellExecutionState,
     NotebookCellStatusBarAlignment,
     NotebookEditorRevealType,
     NotebookControllerAffinity,
@@ -174,10 +176,11 @@ import {
     NotebookCellOutput,
     NotebookCellOutputItem,
     NotebookData,
-    NotebookDocument,
     NotebookRange,
     NotebookCellStatusBarItem,
     NotebookEdit,
+    NotebookKernelSourceAction,
+    NotebookRendererScript,
     TestRunProfileKind,
     TestTag,
     TestRunRequest,
@@ -197,7 +200,10 @@ import {
     DocumentPasteEdit,
     ExternalUriOpenerPriority,
     EditSessionIdentityMatch,
-    TerminalOutputAnchor
+    TerminalOutputAnchor,
+    TerminalQuickFixTerminalCommand,
+    TerminalQuickFixOpener,
+    TestResultState
 } from './types-impl';
 import { AuthenticationExtImpl } from './authentication-ext';
 import { SymbolKind } from '../common/plugin-api-rpc-model';
@@ -226,12 +232,6 @@ import { ClipboardExt } from './clipboard-ext';
 import { WebviewsExtImpl } from './webviews';
 import { ExtHostFileSystemEventService } from './file-system-event-service-ext-impl';
 import { LabelServiceExtImpl } from '../plugin/label-service';
-import {
-    createRunProfile,
-    createTestRun,
-    testItemCollection,
-    createTestItem
-} from './stubs/tests-api';
 import { TimelineExtImpl } from './timeline';
 import { ThemingExtImpl } from './theming';
 import { CommentsExtImpl } from './comments';
@@ -242,7 +242,14 @@ import { Endpoint } from '@theia/core/lib/browser/endpoint';
 import { FilePermission } from '@theia/filesystem/lib/common/files';
 import { TabsExtImpl } from './tabs';
 import { LocalizationExtImpl } from './localization-ext';
+import { NotebooksExtImpl } from './notebook/notebooks';
 import { TelemetryExtImpl } from './telemetry-ext';
+import { NotebookDocument } from './notebook/notebook-document';
+import { NotebookRenderersExtImpl } from './notebook/notebook-renderers';
+import { NotebookKernelsExtImpl } from './notebook/notebook-kernels';
+import { NotebookDocumentsExtImpl } from './notebook/notebook-documents';
+import { NotebookEditorsExtImpl } from './notebook/notebook-editors';
+import { TestingExtImpl } from './tests';
 
 export function createAPIFactory(
     rpc: RPCProtocol,
@@ -266,6 +273,11 @@ export function createAPIFactory(
     const notificationExt = rpc.set(MAIN_RPC_CONTEXT.NOTIFICATION_EXT, new NotificationExtImpl(rpc));
     const editors = rpc.set(MAIN_RPC_CONTEXT.TEXT_EDITORS_EXT, new TextEditorsExtImpl(rpc, editorsAndDocumentsExt));
     const documents = rpc.set(MAIN_RPC_CONTEXT.DOCUMENTS_EXT, new DocumentsExtImpl(rpc, editorsAndDocumentsExt));
+    const notebooksExt = rpc.set(MAIN_RPC_CONTEXT.NOTEBOOKS_EXT, new NotebooksExtImpl(rpc, commandRegistry, editorsAndDocumentsExt, documents));
+    const notebookEditors = rpc.set(MAIN_RPC_CONTEXT.NOTEBOOK_EDITORS_EXT, new NotebookEditorsExtImpl(notebooksExt));
+    const notebookRenderers = rpc.set(MAIN_RPC_CONTEXT.NOTEBOOK_RENDERERS_EXT, new NotebookRenderersExtImpl(rpc, notebooksExt));
+    const notebookKernels = rpc.set(MAIN_RPC_CONTEXT.NOTEBOOK_KERNELS_EXT, new NotebookKernelsExtImpl(rpc, notebooksExt, commandRegistry, webviewExt, workspaceExt));
+    const notebookDocuments = rpc.set(MAIN_RPC_CONTEXT.NOTEBOOK_DOCUMENTS_EXT, new NotebookDocumentsExtImpl(notebooksExt));
     const statusBarMessageRegistryExt = new StatusBarMessageRegistryExt(rpc);
     const terminalExt = rpc.set(MAIN_RPC_CONTEXT.TERMINAL_EXT, new TerminalServiceExtImpl(rpc));
     const outputChannelRegistryExt = rpc.set(MAIN_RPC_CONTEXT.OUTPUT_CHANNEL_REGISTRY_EXT, new OutputChannelRegistryExtImpl(rpc));
@@ -285,6 +297,7 @@ export function createAPIFactory(
     const customEditorExt = rpc.set(MAIN_RPC_CONTEXT.CUSTOM_EDITORS_EXT, new CustomEditorsExtImpl(rpc, documents, webviewExt, workspaceExt));
     const webviewViewsExt = rpc.set(MAIN_RPC_CONTEXT.WEBVIEW_VIEWS_EXT, new WebviewViewsExtImpl(rpc, webviewExt));
     const telemetryExt = rpc.set(MAIN_RPC_CONTEXT.TELEMETRY_EXT, new TelemetryExtImpl());
+    const testingExt = rpc.set(MAIN_RPC_CONTEXT.TESTING_EXT, new TestingExtImpl(rpc, commandRegistry));
     rpc.set(MAIN_RPC_CONTEXT.DEBUG_EXT, debugExt);
 
     return function (plugin: InternalPlugin): typeof theia {
@@ -427,24 +440,24 @@ export function createAPIFactory(
                 }
             },
             get visibleNotebookEditors(): theia.NotebookEditor[] {
-                return [] as theia.NotebookEditor[];
+                return notebooksExt.visibleApiNotebookEditors;
             },
             onDidChangeVisibleNotebookEditors(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebooksExt.onDidChangeVisibleNotebookEditors(listener, thisArg, disposables);
             },
             get activeNotebookEditor(): theia.NotebookEditor | undefined {
-                return undefined;
+                return notebooksExt.activeApiNotebookEditor;
             }, onDidChangeActiveNotebookEditor(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebooksExt.onDidChangeActiveNotebookEditor(listener, thisArg, disposables);
             },
             onDidChangeNotebookEditorSelection(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebookEditors.onDidChangeNotebookEditorSelection(listener, thisArg, disposables);
             },
             onDidChangeNotebookEditorVisibleRanges(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebookEditors.onDidChangeNotebookEditorVisibleRanges(listener, thisArg, disposables);
             },
-            showNotebookDocument(document: NotebookDocument, options?: theia.NotebookDocumentShowOptions) {
-                return Promise.resolve({} as theia.NotebookEditor);
+            showNotebookDocument(document: theia.NotebookDocument, options?: theia.NotebookDocumentShowOptions) {
+                return notebooksExt.showNotebookDocument(document, options);
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             showQuickPick(items: any, options?: theia.QuickPickOptions, token?: theia.CancellationToken): any {
@@ -589,7 +602,15 @@ export function createAPIFactory(
             /** @stubbed TerminalQuickFixProvider */
             registerTerminalQuickFixProvider(id: string, provider: theia.TerminalQuickFixProvider): theia.Disposable {
                 return terminalExt.registerTerminalQuickFixProvider(id, provider);
-            }
+            },
+
+            /** Theia-specific TerminalObserver */
+            registerTerminalObserver(observer: theia.TerminalObserver): theia.Disposable {
+                return terminalExt.registerTerminalObserver(observer);
+            },
+
+            /** @stubbed ShareProvider */
+            registerShareProvider: () => Disposable.NULL,
         };
 
         const workspace: typeof theia.workspace = {
@@ -614,7 +635,7 @@ export function createAPIFactory(
                 return workspaceExt.onDidChangeWorkspaceFolders(listener, thisArg, disposables);
             },
             get notebookDocuments(): theia.NotebookDocument[] {
-                return [] as theia.NotebookDocument[];
+                return notebooksExt.getAllApiDocuments();
             },
             get textDocuments(): theia.TextDocument[] {
                 return documents.getAllDocumentData().map(data => data.document);
@@ -626,19 +647,19 @@ export function createAPIFactory(
                 return documents.onDidRemoveDocument(listener, thisArg, disposables);
             },
             onDidOpenNotebookDocument(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebooksExt.onDidOpenNotebookDocument(listener, thisArg, disposables);
             },
             onDidCloseNotebookDocument(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
-            },
-            onDidChangeNotebookDocument(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+                return notebooksExt.onDidCloseNotebookDocument(listener, thisArg, disposables);
             },
             onWillSaveNotebookDocument(listener, thisArg?, disposables?) {
                 return Disposable.NULL;
             },
-            onDidSaveNotebookDocument(listener, thisArg?, disposables?) {
-                return Disposable.NULL;
+            onDidSaveNotebookDocument(listener, thisArg, disposables) {
+                return notebookDocuments.onDidSaveNotebookDocument(listener, thisArg, disposables);
+            },
+            onDidChangeNotebookDocument(listener, thisArg, disposables) {
+                return notebookDocuments.onDidChangeNotebookDocument(listener, thisArg, disposables);
             },
             onDidOpenTextDocument(listener, thisArg?, disposables?) {
                 return documents.onDidAddDocument(listener, thisArg, disposables);
@@ -684,8 +705,19 @@ export function createAPIFactory(
                 const data = await documents.openDocument(uri);
                 return data && data.document;
             },
-            openNotebookDocument(uriOrString: theia.Uri | string, content?: NotebookData): Promise<theia.NotebookDocument | undefined> {
-                return Promise.reject(new Error('Notebook API is stubbed'));
+            async openNotebookDocument(uriOrType: theia.Uri | string, content?: NotebookData): Promise<theia.NotebookDocument | undefined> {
+                let uri: URI;
+                if (URI.isUri(uriOrType)) {
+                    uri = uriOrType;
+                    await notebooksExt.openNotebookDocument(uriOrType as URI);
+                } else if (typeof uriOrType === 'string') {
+                    uri = URI.revive(await notebooksExt.createNotebookDocument({ viewType: uriOrType, content }));
+                } else {
+                    throw new Error('Invalid arguments');
+                }
+                const result = await notebooksExt.waitForNotebookDocument(uri);
+                return result.apiNotebook;
+
             },
             createFileSystemWatcher: (pattern, ignoreCreate, ignoreChange, ignoreDelete): theia.FileSystemWatcher =>
                 extHostFileSystemEvent.createFileSystemWatcher(fromGlobPattern(pattern), ignoreCreate, ignoreChange, ignoreDelete),
@@ -696,6 +728,13 @@ export function createAPIFactory(
                 callbackOrToken?: CancellationToken | ((result: theia.TextSearchResult) => void), token?: CancellationToken): Promise<theia.TextSearchComplete> {
                 return workspaceExt.findTextInFiles(query, optionsOrCallback, callbackOrToken, token);
             },
+            save(uri: theia.Uri): PromiseLike<theia.Uri | undefined> {
+                return editors.save(uri);
+            },
+
+            saveAs(uri: theia.Uri): PromiseLike<theia.Uri | undefined> {
+                return editors.saveAs(uri);
+            },
             saveAll(includeUntitled?: boolean): PromiseLike<boolean> {
                 return editors.saveAll(includeUntitled);
             },
@@ -705,7 +744,8 @@ export function createAPIFactory(
             registerTextDocumentContentProvider(scheme: string, provider: theia.TextDocumentContentProvider): theia.Disposable {
                 return workspaceExt.registerTextDocumentContentProvider(scheme, provider);
             },
-            registerFileSystemProvider(scheme: string, provider: theia.FileSystemProvider, options?: { isCaseSensitive?: boolean, isReadonly?: boolean }): theia.Disposable {
+            registerFileSystemProvider(scheme: string, provider: theia.FileSystemProvider, options?: { isCaseSensitive?: boolean, isReadonly?: boolean | MarkdownString }):
+                theia.Disposable {
                 return fileSystemExt.registerFileSystemProvider(scheme, provider, options);
             },
             getWorkspaceFolder(uri: theia.Uri): theia.WorkspaceFolder | undefined {
@@ -727,7 +767,7 @@ export function createAPIFactory(
                 return timelineExt.registerTimelineProvider(plugin, scheme, provider);
             },
             registerNotebookSerializer(notebookType: string, serializer: theia.NotebookSerializer, options?: theia.NotebookDocumentContentOptions): theia.Disposable {
-                return Disposable.NULL;
+                return notebooksExt.registerNotebookSerializer(plugin, notebookType, serializer, options);
             },
             get isTrusted(): boolean {
                 return workspaceExt.trusted;
@@ -747,6 +787,12 @@ export function createAPIFactory(
              * that currently use this proposed API.
              */
             onWillCreateEditSessionIdentity: () => Disposable.NULL,
+            registerCanonicalUriProvider(scheme: string, provider: theia.CanonicalUriProvider): theia.Disposable {
+                return workspaceExt.registerCanonicalUriProvider(scheme, provider);
+            },
+            getCanonicalUri(uri: theia.Uri, options: theia.CanonicalUriRequestOptions, token: CancellationToken): theia.ProviderResult<theia.Uri> {
+                return workspaceExt.getCanonicalUri(uri, options, token);
+            }
         };
 
         const onDidChangeLogLevel = new Emitter<theia.LogLevel>();
@@ -767,7 +813,10 @@ export function createAPIFactory(
             get machineId(): string { return envExt.machineId; },
             get sessionId(): string { return envExt.sessionId; },
             get uriScheme(): string { return envExt.uriScheme; },
-            get shell(): string { return envExt.shell; },
+            get shell(): string { return terminalExt.defaultShell; },
+            get onDidChangeShell(): theia.Event<string> {
+                return terminalExt.onDidChangeShell;
+            },
             get uiKind(): theia.UIKind { return envExt.uiKind; },
             clipboard,
             getEnvVariable(envVarName: string): PromiseLike<string | undefined> {
@@ -883,6 +932,13 @@ export function createAPIFactory(
             registerDocumentHighlightProvider(selector: theia.DocumentSelector, provider: theia.DocumentHighlightProvider): theia.Disposable {
                 return languagesExt.registerDocumentHighlightProvider(selector, provider, pluginToPluginInfo(plugin));
             },
+            /**
+             * @stubbed
+             * @monaco-uplift: wait until API is available in Monaco (1.85.0+)
+             */
+            registerMultiDocumentHighlightProvider(selector: theia.DocumentSelector, provider: theia.MultiDocumentHighlightProvider): theia.Disposable {
+                return Disposable.NULL;
+            },
             registerWorkspaceSymbolProvider(provider: theia.WorkspaceSymbolProvider): theia.Disposable {
                 return languagesExt.registerWorkspaceSymbolProvider(provider, pluginToPluginInfo(plugin));
             },
@@ -900,8 +956,8 @@ export function createAPIFactory(
             ): theia.Disposable {
                 return languagesExt.registerOnTypeFormattingEditProvider(selector, provider, [firstTriggerCharacter].concat(moreTriggerCharacters), pluginToPluginInfo(plugin));
             },
-            registerDocumentDropEditProvider(selector: theia.DocumentSelector, provider: theia.DocumentDropEditProvider) {
-                return languagesExt.registerDocumentDropEditProvider(selector, provider);
+            registerDocumentDropEditProvider(selector: theia.DocumentSelector, provider: theia.DocumentDropEditProvider, metadata?: theia.DocumentDropEditProviderMetadata) {
+                return languagesExt.registerDocumentDropEditProvider(selector, provider, metadata);
             },
             registerDocumentLinkProvider(selector: theia.DocumentSelector, provider: theia.DocumentLinkProvider): theia.Disposable {
                 return languagesExt.registerDocumentLinkProvider(selector, provider, pluginToPluginInfo(plugin));
@@ -961,27 +1017,10 @@ export function createAPIFactory(
             }
         };
 
-        // Tests API (@stubbed)
-        // The following implementation is temporarily `@stubbed` and marked as such under `theia.d.ts`
         const tests: typeof theia.tests = {
-            createTestController(
-                provider,
-                controllerLabel: string,
-                refreshHandler?: (
-                    token: theia.CancellationToken
-                ) => Thenable<void> | void
-            ) {
-                return {
-                    id: provider,
-                    label: controllerLabel,
-                    items: testItemCollection,
-                    refreshHandler,
-                    createRunProfile,
-                    createTestRun,
-                    createTestItem,
-                    dispose: () => undefined,
-                };
-            },
+            createTestController(id, label: string) {
+                return testingExt.createTestController(id, label);
+            }
         };
         /* End of Tests API */
 
@@ -1148,54 +1187,27 @@ export function createAPIFactory(
                 label,
                 handler?: (cells: theia.NotebookCell[],
                     notebook: theia.NotebookDocument,
-                    controller: theia.NotebookController) => void | Thenable<void>
+                    controller: theia.NotebookController) => void | Thenable<void>,
+                rendererScripts?: NotebookRendererScript[]
             ) {
-                return {
-                    id,
-                    notebookType,
-                    label,
-                    handler,
-                    createNotebookCellExecution: (cell: NotebookCell) => ({
-                        cell,
-                        token: CancellationToken.None,
-                        executionOrder: undefined,
-                        start: () => undefined,
-                        end: () => undefined,
-                        clearOutput: () => ({} as Thenable<void>),
-                        replaceOutput: () => ({} as Thenable<void>),
-                        appendOutput: () => ({} as Thenable<void>),
-                        replaceOutputItems: () => ({} as Thenable<void>),
-                        appendOutputItems: () => ({} as Thenable<void>)
-                    }),
-                    executeHandler(
-                        cells: theia.NotebookCell[],
-                        notebook: theia.NotebookDocument,
-                        controller: theia.NotebookController
-                    ): (void | Thenable<void>) { },
-                    onDidChangeSelectedNotebooks: () => Disposable.create(() => { }),
-                    updateNotebookAffinity: (notebook: theia.NotebookDocument, affinity: theia.NotebookControllerAffinity) => undefined,
-                    dispose: () => undefined,
-                };
-
+                return notebookKernels.createNotebookController(plugin.model, id, notebookType, label, handler, rendererScripts);
             },
-            createRendererMessaging(
-                rendererId
-            ) {
-                return {
-                    rendererId,
-                    onDidReceiveMessage: () => Disposable.create(() => { }),
-                    postMessage: () => Promise.resolve({}),
-                };
+            createRendererMessaging(rendererId) {
+                return notebookRenderers.createRendererMessaging(rendererId);
             },
             registerNotebookCellStatusBarItemProvider(
                 notebookType,
                 provider
             ) {
-                return {
-                    notebookType,
-                    provider,
-                    dispose: () => undefined,
-                };
+                return notebooksExt.registerNotebookCellStatusBarItemProvider(notebookType, provider);
+            },
+            onDidChangeNotebookCellExecutionState: notebookKernels.onDidChangeNotebookCellExecutionState,
+
+            createNotebookControllerDetectionTask(notebookType: string) {
+                return notebookKernels.createNotebookControllerDetectionTask(notebookType);
+            },
+            registerKernelSourceActionProvider(notebookType: string, provider: theia.NotebookKernelSourceActionProvider) {
+                return notebookKernels.registerKernelSourceActionProvider(notebookType, provider);
             }
         };
 
@@ -1240,6 +1252,7 @@ export function createAPIFactory(
             ConfigurationTarget,
             RelativePattern,
             IndentAction,
+            SyntaxTokenType,
             CompletionItem,
             CompletionItemKind,
             CompletionList,
@@ -1271,6 +1284,7 @@ export function createAPIFactory(
             InlineValueContext,
             DocumentHighlightKind,
             DocumentHighlight,
+            MultiDocumentHighlight,
             DocumentLink,
             DocumentDropEdit,
             CodeLens,
@@ -1283,6 +1297,7 @@ export function createAPIFactory(
             DataTransfer,
             TreeItem,
             TreeItemCollapsibleState,
+            TreeItemCheckboxState,
             SymbolKind,
             SymbolTag,
             DocumentSymbol,
@@ -1349,6 +1364,7 @@ export function createAPIFactory(
             InlayHintLabelPart,
             TelemetryTrustedValue,
             NotebookCellData,
+            NotebookCellExecutionState,
             NotebookCellKind,
             NotebookCellOutput,
             NotebookCellOutputItem,
@@ -1360,6 +1376,8 @@ export function createAPIFactory(
             NotebookDocument,
             NotebookRange,
             NotebookEdit,
+            NotebookKernelSourceAction,
+            NotebookRendererScript,
             TestRunProfileKind,
             TestTag,
             TestRunRequest,
@@ -1381,8 +1399,10 @@ export function createAPIFactory(
             TerminalExitReason,
             DocumentPasteEdit,
             ExternalUriOpenerPriority,
-            TerminalQuickFixType,
-            EditSessionIdentityMatch
+            TerminalQuickFixTerminalCommand,
+            TerminalQuickFixOpener,
+            EditSessionIdentityMatch,
+            TestResultState
         };
     };
 }
@@ -1412,6 +1432,8 @@ export interface ExtensionPlugin<T> extends theia.Plugin<T> {
 }
 
 export class Plugin<T> implements theia.Plugin<T> {
+    #pluginManager: PluginManager;
+
     id: string;
     pluginPath: string;
     pluginUri: theia.Uri;
@@ -1419,7 +1441,9 @@ export class Plugin<T> implements theia.Plugin<T> {
     packageJSON: any;
     pluginType: theia.PluginType;
 
-    constructor(protected readonly pluginManager: PluginManager, plugin: InternalPlugin) {
+    constructor(pluginManager: PluginManager, plugin: InternalPlugin) {
+        this.#pluginManager = pluginManager;
+
         this.id = plugin.model.id;
         this.pluginPath = plugin.pluginFolder;
         this.packageJSON = plugin.rawModel;
@@ -1434,26 +1458,29 @@ export class Plugin<T> implements theia.Plugin<T> {
     }
 
     get isActive(): boolean {
-        return this.pluginManager.isActive(this.id);
+        return this.#pluginManager.isActive(this.id);
     }
 
     get exports(): T {
-        return <T>this.pluginManager.getPluginExport(this.id);
+        return <T>this.#pluginManager.getPluginExport(this.id);
     }
 
     activate(): PromiseLike<T> {
-        return this.pluginManager.activatePlugin(this.id).then(() => this.exports);
+        return this.#pluginManager.activatePlugin(this.id).then(() => this.exports);
     }
 }
 
 export class PluginExt<T> extends Plugin<T> implements ExtensionPlugin<T> {
+    #pluginManager: PluginManager;
+
     extensionPath: string;
     extensionUri: theia.Uri;
     extensionKind: ExtensionKind;
     isFromDifferentExtensionHost: boolean;
 
-    constructor(protected override readonly pluginManager: PluginManager, plugin: InternalPlugin, isFromDifferentExtensionHost = false) {
+    constructor(pluginManager: PluginManager, plugin: InternalPlugin, isFromDifferentExtensionHost = false) {
         super(pluginManager, plugin);
+        this.#pluginManager = pluginManager;
 
         this.extensionPath = this.pluginPath;
         this.extensionUri = this.pluginUri;
@@ -1462,14 +1489,14 @@ export class PluginExt<T> extends Plugin<T> implements ExtensionPlugin<T> {
     }
 
     override get isActive(): boolean {
-        return this.pluginManager.isActive(this.id);
+        return this.#pluginManager.isActive(this.id);
     }
 
     override get exports(): T {
-        return <T>this.pluginManager.getPluginExport(this.id);
+        return <T>this.#pluginManager.getPluginExport(this.id);
     }
 
     override activate(): PromiseLike<T> {
-        return this.pluginManager.activatePlugin(this.id).then(() => this.exports);
+        return this.#pluginManager.activatePlugin(this.id).then(() => this.exports);
     }
 }

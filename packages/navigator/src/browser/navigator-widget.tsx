@@ -30,7 +30,7 @@ import { nls } from '@theia/core/lib/common/nls';
 import { AbstractNavigatorTreeWidget } from './abstract-navigator-tree-widget';
 
 export const FILE_NAVIGATOR_ID = 'files';
-export const LABEL = nls.localizeByDefault('No Folder Opened');
+export const LABEL = nls.localize('theia/navigator/noFolderOpened', 'No Folder Opened');
 export const CLASS = 'theia-Files';
 
 @injectable()
@@ -175,14 +175,13 @@ export class FileNavigatorWidget extends AbstractNavigatorTreeWidget {
      * Instead of displaying an empty navigator tree, this will show a button to add more folders.
      */
     protected renderEmptyMultiRootWorkspace(): React.ReactNode {
-        // TODO: @msujew Implement a markdown renderer and use vscode/explorerViewlet/noFolderHelp
         return <div className='theia-navigator-container'>
-            <div className='center'>You have not yet added a folder to the workspace.</div>
+            <div className='center'>{nls.localizeByDefault('You have not yet added a folder to the workspace.\n{0}', '')}</div>
             <div className='open-workspace-button-container'>
-                <button className='theia-button open-workspace-button' title='Add a folder to your workspace'
+                <button className='theia-button open-workspace-button' title={nls.localizeByDefault('Add Folder to Workspace')}
                     onClick={this.addFolder}
                     onKeyUp={this.keyUpHandler}>
-                    Add Folder
+                    {nls.localizeByDefault('Open Folder')}
                 </button>
             </div>
         </div>;

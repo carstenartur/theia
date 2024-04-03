@@ -24,7 +24,6 @@ import { IEditorHoverOptions } from '@theia/monaco-editor-core/esm/vs/editor/com
 import URI from '@theia/core/lib/common/uri';
 import { Disposable, DisposableCollection, MenuPath, isOSX } from '@theia/core';
 import { ContextMenuRenderer } from '@theia/core/lib/browser';
-import { MonacoConfigurationService } from '@theia/monaco/lib/browser/monaco-frontend-module';
 import { BreakpointManager, SourceBreakpointsChangeEvent } from '../breakpoint/breakpoint-manager';
 import { DebugSourceBreakpoint } from '../model/debug-source-breakpoint';
 import { DebugSessionManager } from '../debug-session-manager';
@@ -35,6 +34,7 @@ import { DebugBreakpointWidget } from './debug-breakpoint-widget';
 import { DebugExceptionWidget } from './debug-exception-widget';
 import { DebugProtocol } from '@vscode/debugprotocol';
 import { DebugInlineValueDecorator, INLINE_VALUE_DECORATION_KEY } from './debug-inline-value-decorator';
+import { StandaloneServices } from '@theia/monaco-editor-core/esm/vs/editor/standalone/browser/standaloneServices';
 
 export const DebugEditorModelFactory = Symbol('DebugEditorModelFactory');
 export type DebugEditorModelFactory = (editor: DebugEditor) => DebugEditorModel;
@@ -93,9 +93,6 @@ export class DebugEditorModel implements Disposable {
 
     @inject(DebugInlineValueDecorator)
     readonly inlineValueDecorator: DebugInlineValueDecorator;
-
-    @inject(MonacoConfigurationService)
-    readonly configurationService: IConfigurationService;
 
     @inject(DebugSessionManager)
     protected readonly sessionManager: DebugSessionManager;
@@ -156,7 +153,7 @@ export class DebugEditorModel implements Disposable {
                     resource: model.uri,
                     overrideIdentifier: model.getLanguageId(),
                 };
-                const { enabled, delay, sticky } = this.configurationService.getValue<IEditorHoverOptions>('editor.hover', overrides);
+                const { enabled, delay, sticky } = StandaloneServices.get(IConfigurationService).getValue<IEditorHoverOptions>('editor.hover', overrides);
                 codeEditor.updateOptions({
                     hover: {
                         enabled,
@@ -190,6 +187,10 @@ export class DebugEditorModel implements Disposable {
     protected createFrameDecorations(): monaco.editor.IModelDeltaDecoration[] {
         const { currentFrame, topFrame } = this.sessions;
         if (!currentFrame) {
+            return [];
+        }
+
+        if (!currentFrame.thread.stopped) {
             return [];
         }
 
@@ -341,7 +342,9 @@ export class DebugEditorModel implements Disposable {
                 const line = range.startLineNumber;
                 const column = range.startColumn;
                 const oldBreakpoint = this.breakpointRanges.get(decoration)?.[1];
-                const breakpoint = SourceBreakpoint.create(uri, { line, column }, oldBreakpoint);
+                const isLineBreakpoint = oldBreakpoint?.raw.line !== undefined && oldBreakpoint?.raw.column === undefined;
+                const change = isLineBreakpoint ? { line } : { line, column };
+                const breakpoint = SourceBreakpoint.create(uri, change, oldBreakpoint);
                 breakpoints.push(breakpoint);
                 lines.add(line);
             }
@@ -407,16 +410,7 @@ export class DebugEditorModel implements Disposable {
 
     protected handleMouseDown(event: monaco.editor.IEditorMouseEvent): void {
         if (event.target && event.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-            if (event.event.rightButton) {
-                this.editor.focus();
-                setTimeout(() => {
-                    this.contextMenu.render({
-                        menuPath: DebugEditorModel.CONTEXT_MENU,
-                        anchor: event.event.browserEvent,
-                        args: [event.target.position!]
-                    });
-                });
-            } else {
+            if (!event.event.rightButton) {
                 this.toggleBreakpoint(event.target.position!);
             }
         }

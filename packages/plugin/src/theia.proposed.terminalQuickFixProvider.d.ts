@@ -22,6 +22,8 @@
 
 export module '@theia/plugin' {
 
+    export type SingleOrMany<T> = T[] | T;
+
     export namespace window {
         /**
          * @param provider A terminal quick fix provider
@@ -37,7 +39,8 @@ export module '@theia/plugin' {
          * @param token A cancellation token indicating the result is no longer needed
          * @return Terminal quick fix(es) if any
          */
-        provideTerminalQuickFixes(commandMatchResult: TerminalCommandMatchResult, token: CancellationToken): TerminalQuickFix[] | TerminalQuickFix | undefined;
+        provideTerminalQuickFixes(commandMatchResult: TerminalCommandMatchResult, token: CancellationToken):
+            ProviderResult<SingleOrMany<TerminalQuickFixTerminalCommand | TerminalQuickFixOpener | Command>>;
     }
 
     export interface TerminalCommandMatchResult {
@@ -49,13 +52,23 @@ export module '@theia/plugin' {
         };
     }
 
-    interface TerminalQuickFix {
-        type: TerminalQuickFixType;
+    export class TerminalQuickFixTerminalCommand {
+        /**
+         * The terminal command to insert or run
+         */
+        terminalCommand: string;
+        /**
+         * Whether the command should be executed or just inserted (default)
+         */
+        shouldExecute?: boolean;
+        constructor(terminalCommand: string, shouldExecute?: boolean);
     }
-
-    enum TerminalQuickFixType {
-        command = 'command',
-        opener = 'opener'
+    export class TerminalQuickFixOpener {
+        /**
+         * The uri to open
+         */
+        uri: Uri;
+        constructor(uri: Uri);
     }
 
     /**

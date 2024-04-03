@@ -16,13 +16,13 @@
 
 import { Widget } from '@phosphor/widgets';
 import { Message } from '@phosphor/messaging';
-import { Event } from '../common/event';
+import { Emitter, Event } from '../common/event';
 import { MaybePromise } from '../common/types';
 import { Key } from './keyboard/keys';
 import { AbstractDialog } from './dialogs';
 import { waitForClosed } from './widgets';
 import { nls } from '../common/nls';
-import { isObject } from '../common';
+import { Disposable, isObject } from '../common';
 
 export interface Saveable {
     readonly dirty: boolean;
@@ -48,6 +48,45 @@ export interface Saveable {
 
 export interface SaveableSource {
     readonly saveable: Saveable;
+}
+
+export class DelegatingSaveable implements Saveable {
+    dirty = false;
+    protected readonly onDirtyChangedEmitter = new Emitter<void>();
+
+    get onDirtyChanged(): Event<void> {
+        return this.onDirtyChangedEmitter.event;
+    }
+    autoSave: 'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange' = 'off';
+
+    async save(options?: SaveOptions): Promise<void> {
+        await this._delegate?.save(options);
+    }
+
+    revert?(options?: Saveable.RevertOptions): Promise<void>;
+    createSnapshot?(): Saveable.Snapshot;
+    applySnapshot?(snapshot: object): void;
+
+    protected _delegate?: Saveable;
+    protected toDispose?: Disposable;
+
+    set delegate(delegate: Saveable) {
+        this.toDispose?.dispose();
+        this._delegate = delegate;
+        this.toDispose = delegate.onDirtyChanged(() => {
+            this.dirty = delegate.dirty;
+            this.onDirtyChangedEmitter.fire();
+        });
+        this.autoSave = delegate.autoSave;
+        if (this.dirty !== delegate.dirty) {
+            this.dirty = delegate.dirty;
+            this.onDirtyChangedEmitter.fire();
+        }
+        this.revert = delegate.revert?.bind(delegate);
+        this.createSnapshot = delegate.createSnapshot?.bind(delegate);
+        this.applySnapshot = delegate.applySnapshot?.bind(delegate);
+    }
+
 }
 
 export namespace Saveable {
@@ -125,8 +164,12 @@ export namespace Saveable {
                 if (typeof result === 'boolean') {
                     if (result) {
                         await (doSave?.(this) ?? Saveable.save(this));
+                        if (!isDirty(this)) {
+                            await this.closeWithoutSaving();
+                        }
+                    } else {
+                        await this.closeWithoutSaving();
                     }
-                    await this.closeWithoutSaving();
                 }
             } finally {
                 closing = false;

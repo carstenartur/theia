@@ -26,10 +26,6 @@ export const Coordinate = Symbol('Coordinate');
 
 export type Anchor = MouseEvent | Coordinate;
 
-export function toAnchor(anchor: HTMLElement | Coordinate): Anchor {
-    return anchor instanceof HTMLElement ? { x: anchor.offsetLeft, y: anchor.offsetTop } : anchor;
-}
-
 export function coordinateFromAnchor(anchor: Anchor): Coordinate {
     const { x, y } = anchor instanceof MouseEvent ? { x: anchor.clientX, y: anchor.clientY } : anchor;
     return { x, y };
@@ -120,4 +116,9 @@ export interface RenderContextMenuOptions {
     context?: HTMLElement;
     contextKeyService?: ContextMatcher;
     onHide?: () => void;
+    /**
+     * If true a single submenu in the context menu is not rendered but its children are rendered on the top level.
+     * Default is `false`.
+     */
+    skipSingleRootNode?: boolean;
 }
