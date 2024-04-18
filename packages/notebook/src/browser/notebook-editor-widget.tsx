@@ -16,7 +16,7 @@
 
 import * as React from '@theia/core/shared/react';
 import { CommandRegistry, MenuModelRegistry, URI } from '@theia/core';
-import { ReactWidget, Navigatable, SaveableSource, Message, DelegatingSaveable, lock, unlock } from '@theia/core/lib/browser';
+import { ReactWidget, Navigatable, SaveableSource, Message, DelegatingSaveable, lock, unlock, animationFrame } from '@theia/core/lib/browser';
 import { ReactNode } from '@theia/core/shared/react';
 import { CellKind } from '../common';
 import { CellRenderer as CellRenderer, NotebookCellListView } from './view/notebook-cell-list-view';
@@ -32,6 +32,7 @@ import { Deferred } from '@theia/core/lib/common/promise-util';
 import { MarkdownString } from '@theia/core/lib/common/markdown-rendering';
 import { NotebookContextManager } from './service/notebook-context-manager';
 import { NotebookViewportService } from './view/notebook-viewport-service';
+import { NotebookCellCommands } from './contributions/notebook-cell-actions-contribution';
 const PerfectScrollbar = require('react-perfect-scrollbar');
 
 export const NotebookEditorWidgetContainerFactory = Symbol('NotebookEditorWidgetContainerFactory');
@@ -43,6 +44,7 @@ export function createNotebookEditorWidgetContainer(parent: interfaces.Container
 
     child.bind(NotebookContextManager).toSelf().inSingletonScope();
     child.bind(NotebookMainToolbarRenderer).toSelf().inSingletonScope();
+    child.bind(NotebookCellToolbarFactory).toSelf().inSingletonScope();
     child.bind(NotebookCodeCellRenderer).toSelf().inSingletonScope();
     child.bind(NotebookMarkdownCellRenderer).toSelf().inSingletonScope();
     child.bind(NotebookViewportService).toSelf().inSingletonScope();
@@ -121,6 +123,7 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
     protected readonly renderers = new Map<CellKind, CellRenderer>();
     protected _model?: NotebookModel;
     protected _ready: Deferred<NotebookModel> = new Deferred();
+    protected scrollBarRef = React.createRef<{ updateScroll(): void }>();
 
     get notebookType(): string {
         return this.props.notebookType;
@@ -152,12 +155,25 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
         this.renderers.set(CellKind.Markup, this.markdownCellRenderer);
         this.renderers.set(CellKind.Code, this.codeCellRenderer);
         this._ready.resolve(this.waitForData());
+        this.ready.then(model => {
+            if (model.cells.length === 1 && model.cells[0].source === '') {
+                this.commandRegistry.executeCommand(NotebookCellCommands.EDIT_COMMAND.id, model, model.cells[0]);
+                model.setSelectedCell(model.cells[0]);
+            }
+            model.cells.forEach(cell => cell.onWillBlurCellEditor(() => this.node.focus()));
+            model.onDidAddOrRemoveCell(e => e.newCellIds?.forEach(cellId => model.cells.find(cell => cell.handle === cellId)?.onWillBlurCellEditor(() => this.node.focus())));
+        });
     }
 
     protected async waitForData(): Promise<NotebookModel> {
         this._model = await this.props.notebookData;
         this.saveable.delegate = this._model;
         this.toDispose.push(this._model);
+        this.toDispose.push(this._model.onDidChangeContent(() => {
+            // Update the scroll bar content after the content has changed
+            // Wait one frame to ensure that the content has been rendered
+            animationFrame().then(() => this.scrollBarRef.current?.updateScroll());
+        }));
         this.toDispose.push(this._model.onDidChangeReadOnly(readOnly => {
             if (readOnly) {
                 lock(this.title);
@@ -204,6 +220,7 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
                 {this.notebookMainToolbarRenderer.render(this._model, this.node)}
                 <div className='theia-notebook-viewport' ref={(ref: HTMLDivElement) => this.viewportService.viewportElement = ref}>
                     <PerfectScrollbar className='theia-notebook-scroll-container'
+                        ref={this.scrollBarRef}
                         onScrollY={(e: HTMLDivElement) => this.viewportService.onScroll(e)}>
                         <NotebookCellListView renderers={this.renderers}
                             notebookModel={this._model}
@@ -241,6 +258,7 @@ export class NotebookEditorWidget extends ReactWidget implements Navigatable, Sa
         this.onDidReceiveKernelMessageEmitter.dispose();
         this.onPostRendererMessageEmitter.dispose();
         this.viewportService.dispose();
+        this._model?.dispose();
         super.dispose();
     }
 

@@ -213,8 +213,9 @@
   cursor: pointer;
 }
 
-.theia-notebook-main-toolbar-item:hover {
-  background-color: var(--theia-toolbar-hoverBackground);
+.theia-notebook-main-toolbar-item.theia-mod-disabled:hover {
+  background-color: transparent;
+  cursor: default;
 }
 
 .theia-notebook-main-toolbar-item-text {
@@ -264,4 +265,13 @@
   height: 2px;
   background-color: var(--theia-notebook-focusedCellBorder);
   width: 100%;
+}
+
+.theia-notebook-collapsed-output {
+  padding: 4px 8px;
+  color: var(--theia-foreground);
+  margin-left: 30px;
+  font-size: 14px;
+  line-height: 22px;
+  opacity: 0.7;
 }
