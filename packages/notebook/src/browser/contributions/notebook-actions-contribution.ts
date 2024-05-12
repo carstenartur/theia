@@ -24,8 +24,9 @@ import { NotebookKernelQuickPickService } from '../service/notebook-kernel-quick
 import { NotebookExecutionService } from '../service/notebook-execution-service';
 import { NotebookEditorWidget } from '../notebook-editor-widget';
 import { NotebookEditorWidgetService } from '../service/notebook-editor-widget-service';
-import { NOTEBOOK_CELL_FOCUSED, NOTEBOOK_EDITOR_FOCUSED, NOTEBOOK_HAS_OUTPUTS } from './notebook-context-keys';
+import { NOTEBOOK_CELL_CURSOR_FIRST_LINE, NOTEBOOK_CELL_CURSOR_LAST_LINE, NOTEBOOK_CELL_FOCUSED, NOTEBOOK_EDITOR_FOCUSED, NOTEBOOK_HAS_OUTPUTS } from './notebook-context-keys';
 import { NotebookClipboardService } from '../service/notebook-clipboard-service';
+import { ContextKeyService } from '@theia/core/lib/browser/context-key-service';
 
 export namespace NotebookCommands {
     export const ADD_NEW_CELL_COMMAND = Command.toDefaultLocalizedCommand({
@@ -69,17 +70,17 @@ export namespace NotebookCommands {
     });
 
     export const CUT_SELECTED_CELL = Command.toDefaultLocalizedCommand({
-        id: 'notebook.cut-selected-cell',
+        id: 'notebook.cell.cut',
         category: 'Notebook',
     });
 
     export const COPY_SELECTED_CELL = Command.toDefaultLocalizedCommand({
-        id: 'notebook.copy-selected-cell',
+        id: 'notebook.cell.copy',
         category: 'Notebook',
     });
 
     export const PASTE_CELL = Command.toDefaultLocalizedCommand({
-        id: 'notebook.paste-cell',
+        id: 'notebook.cell.paste',
         category: 'Notebook',
     });
 }
@@ -110,22 +111,26 @@ export class NotebookActionsContribution implements CommandContribution, MenuCon
     @inject(NotebookClipboardService)
     protected notebookClipboardService: NotebookClipboardService;
 
+    @inject(ContextKeyService)
+    protected contextKeyService: ContextKeyService;
+
     registerCommands(commands: CommandRegistry): void {
         commands.registerCommand(NotebookCommands.ADD_NEW_CELL_COMMAND, {
             execute: (notebookModel: NotebookModel, cellKind: CellKind = CellKind.Markup, index?: number | 'above' | 'below') => {
                 notebookModel = notebookModel ?? this.notebookEditorWidgetService.focusedEditor?.model;
 
                 let insertIndex: number = 0;
-                if (index && index >= 0) {
-                    insertIndex = index as number;
+                if (typeof index === 'number' && index >= 0) {
+                    insertIndex = index;
                 } else if (notebookModel.selectedCell && typeof index === 'string') {
                     // if index is -1 insert below otherwise at the index of the selected cell which is above the selected.
                     insertIndex = notebookModel.cells.indexOf(notebookModel.selectedCell) + (index === 'below' ? 1 : 0);
                 }
 
-                let firstCodeCell;
+                let cellLanguage: string = 'markdown';
                 if (cellKind === CellKind.Code) {
-                    firstCodeCell = notebookModel.cells.find(cell => cell.cellKind === CellKind.Code);
+                    const firstCodeCell = notebookModel.cells.find(cell => cell.cellKind === CellKind.Code);
+                    cellLanguage = firstCodeCell?.language ?? 'plaintext';
                 }
 
                 notebookModel.applyEdits([{
@@ -134,7 +139,7 @@ export class NotebookActionsContribution implements CommandContribution, MenuCon
                     count: 0,
                     cells: [{
                         cellKind,
-                        language: firstCodeCell?.language ?? 'markdown',
+                        language: cellLanguage,
                         source: '',
                         outputs: [],
                         metadata: {},
@@ -169,15 +174,29 @@ export class NotebookActionsContribution implements CommandContribution, MenuCon
         commands.registerCommand(NotebookCommands.CHANGE_SELECTED_CELL,
             {
                 execute: (change: number | CellChangeDirection) => {
-                    const model = this.notebookEditorWidgetService.focusedEditor?.model;
+                    const focusedEditor = this.notebookEditorWidgetService.focusedEditor;
+                    const model = focusedEditor?.model;
                     if (model && typeof change === 'number') {
                         model.setSelectedCell(model.cells[change]);
                     } else if (model && model.selectedCell) {
                         const currentIndex = model.cells.indexOf(model.selectedCell);
+                        const shouldFocusEditor = this.contextKeyService.match('editorTextFocus');
+
                         if (change === CellChangeDirection.Up && currentIndex > 0) {
                             model.setSelectedCell(model.cells[currentIndex - 1]);
+                            if (model.selectedCell?.cellKind === CellKind.Code && shouldFocusEditor) {
+                                model.selectedCell.requestFocusEditor('lastLine');
+                            }
                         } else if (change === CellChangeDirection.Down && currentIndex < model.cells.length - 1) {
                             model.setSelectedCell(model.cells[currentIndex + 1]);
+                            if (model.selectedCell?.cellKind === CellKind.Code && shouldFocusEditor) {
+                                model.selectedCell.requestFocusEditor();
+                            }
+                        }
+
+                        if (model.selectedCell.cellKind === CellKind.Markup) {
+                            // since were losing focus from the cell editor, we need to focus the notebook editor again
+                            focusedEditor?.node.focus();
                         }
                     }
                 }
@@ -286,6 +305,8 @@ export class NotebookActionsContribution implements CommandContribution, MenuCon
             order: '30',
             when: NOTEBOOK_HAS_OUTPUTS
         });
+
+        menus.registerIndependentSubmenu(NotebookMenus.NOTEBOOK_MAIN_TOOLBAR_HIDDEN_ITEMS_CONTEXT_MENU, '');
     }
 
     registerKeybindings(keybindings: KeybindingRegistry): void {
@@ -294,13 +315,13 @@ export class NotebookActionsContribution implements CommandContribution, MenuCon
                 command: NotebookCommands.CHANGE_SELECTED_CELL.id,
                 keybinding: 'up',
                 args: CellChangeDirection.Up,
-                when: `!editorTextFocus && ${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`
+                when: `(!editorTextFocus || ${NOTEBOOK_CELL_CURSOR_FIRST_LINE}) && ${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`
             },
             {
                 command: NotebookCommands.CHANGE_SELECTED_CELL.id,
                 keybinding: 'down',
                 args: CellChangeDirection.Down,
-                when: `!editorTextFocus && ${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`
+                when: `(!editorTextFocus || ${NOTEBOOK_CELL_CURSOR_LAST_LINE})  && ${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`
             },
             {
                 command: NotebookCommands.CUT_SELECTED_CELL.id,
@@ -326,4 +347,5 @@ export namespace NotebookMenus {
     export const NOTEBOOK_MAIN_TOOLBAR = 'notebook/toolbar';
     export const NOTEBOOK_MAIN_TOOLBAR_CELL_ADD_GROUP = [NOTEBOOK_MAIN_TOOLBAR, 'cell-add-group'];
     export const NOTEBOOK_MAIN_TOOLBAR_EXECUTION_GROUP = [NOTEBOOK_MAIN_TOOLBAR, 'cell-execution-group'];
+    export const NOTEBOOK_MAIN_TOOLBAR_HIDDEN_ITEMS_CONTEXT_MENU = 'notebook-main-toolbar-hidden-items-context-menu';
 }

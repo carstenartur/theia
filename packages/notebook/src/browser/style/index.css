@@ -109,8 +109,13 @@
   flex-grow: 1;
 }
 
-.notebook-cell-status-right {
-  margin: 0 5px;
+.notebook-cell-language-label {
+  padding: 0 5px;
+}
+
+.notebook-cell-language-label:hover {
+  cursor: pointer;
+  background-color: var(--theia-toolbar-hoverBackground);
 }
 
 .notebook-cell-status-item {
@@ -220,6 +225,7 @@
 
 .theia-notebook-main-toolbar-item-text {
   padding: 0 4px;
+  white-space: nowrap;
 }
 
 .theia-notebook-toolbar-separator {
@@ -274,4 +280,12 @@
   font-size: 14px;
   line-height: 22px;
   opacity: 0.7;
+}
+
+.theia-notebook-drag-ghost-image {
+  position: absolute;
+  top: -99999px;
+  left: -99999px;
+  height: 500px;
+  width: 500px;
 }

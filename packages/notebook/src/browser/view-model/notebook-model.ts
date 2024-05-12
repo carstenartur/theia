@@ -141,7 +141,7 @@ export class NotebookModel implements Saveable, Disposable {
 
         this.addCellOutputListeners(this.cells);
 
-        this.metadata = this.metadata;
+        this.metadata = this.props.data.metadata;
 
         this.nextHandle = this.cells.length;
     }
@@ -156,7 +156,7 @@ export class NotebookModel implements Saveable, Disposable {
         this.onDidDisposeEmitter.fire();
     }
 
-    async save(options: SaveOptions): Promise<void> {
+    async save(options?: SaveOptions): Promise<void> {
         this.dirtyCells = [];
         this.dirty = false;
 
@@ -186,25 +186,8 @@ export class NotebookModel implements Saveable, Disposable {
         if (!rawData) {
             throw new Error('could not read notebook snapshot');
         }
-        const data = JSON.parse(rawData);
-        const cells = data.cells.map((cell: CellData, index: number) => {
-            const handle = this.nextHandle++;
-            return this.cellModelFactory({
-                uri: CellUri.generate(this.uri, handle),
-                handle: handle,
-                source: cell.source,
-                language: cell.language,
-                cellKind: cell.cellKind,
-                outputs: cell.outputs,
-                metadata: cell.metadata,
-                internalMetadata: cell.internalMetadata,
-                collapseState: cell.collapseState
-            });
-        });
-        this.addCellOutputListeners(cells);
-
-        this.metadata = data.metadata;
-
+        const data = JSON.parse(rawData) as NotebookData;
+        this.setData(data);
     }
 
     async revert(options?: Saveable.RevertOptions): Promise<void> {
@@ -227,6 +210,14 @@ export class NotebookModel implements Saveable, Disposable {
         if (this.dirty !== oldDirtyState) {
             this.onDirtyChangedEmitter.fire();
         }
+    }
+
+    setData(data: NotebookData): void {
+        // Replace all cells in the model
+        this.replaceCells(0, this.cells.length, data.cells, false);
+        this.metadata = data.metadata;
+        this.dirty = false;
+        this.onDidChangeContentEmitter.fire();
     }
 
     undo(): void {
@@ -331,7 +322,7 @@ export class NotebookModel implements Saveable, Disposable {
 
     }
 
-    protected async replaceCells(start: number, deleteCount: number, newCells: CellData[], computeUndoRedo: boolean): Promise<void> {
+    protected replaceCells(start: number, deleteCount: number, newCells: CellData[], computeUndoRedo: boolean): void {
         const cells = newCells.map(cell => {
             const handle = this.nextHandle++;
             return this.cellModelFactory({
@@ -361,10 +352,6 @@ export class NotebookModel implements Saveable, Disposable {
                 async () => this.replaceCells(start, newCells.length, deletedCells.map(cell => cell.getData()), false),
                 async () => this.replaceCells(start, deleteCount, newCells, false));
         }
-
-        // Ensure that all text model have been created
-        // Otherwise we run into a race condition once we fire `onDidChangeContent`
-        await Promise.all(cells.map(cell => cell.resolveTextModel()));
 
         this.onDidAddOrRemoveCellEmitter.fire({ rawEvent: { kind: NotebookCellsChangeType.ModelChange, changes }, newCellIds: cells.map(cell => cell.handle) });
         this.onDidChangeContentEmitter.queue({ kind: NotebookCellsChangeType.ModelChange, changes });

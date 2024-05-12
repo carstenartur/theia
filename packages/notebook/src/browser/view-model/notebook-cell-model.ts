@@ -31,9 +31,12 @@ import { NotebookMonacoTextModelService } from '../service/notebook-monaco-text-
 import { NotebookCellOutputModel } from './notebook-cell-output-model';
 import { PreferenceService } from '@theia/core/lib/browser';
 import { NOTEBOOK_LINE_NUMBERS } from '../contributions/notebook-preferences';
+import { LanguageService } from '@theia/core/lib/browser/language-service';
 
 export const NotebookCellModelFactory = Symbol('NotebookModelFactory');
 export type NotebookCellModelFactory = (props: NotebookCellModelProps) => NotebookCellModel;
+
+export type CellEditorFocusRequest = number | 'lastLine' | undefined;
 
 export function createNotebookCellModelContainer(parent: interfaces.Container, props: NotebookCellModelProps): interfaces.Container {
     const child = parent.createChild();
@@ -103,7 +106,7 @@ export class NotebookCellModel implements NotebookCell, Disposable {
     protected readonly onDidRequestCellEditChangeEmitter = new Emitter<boolean>();
     readonly onDidRequestCellEditChange = this.onDidRequestCellEditChangeEmitter.event;
 
-    protected readonly onWillFocusCellEditorEmitter = new Emitter<void>();
+    protected readonly onWillFocusCellEditorEmitter = new Emitter<CellEditorFocusRequest>();
     readonly onWillFocusCellEditor = this.onWillFocusCellEditorEmitter.event;
 
     protected readonly onWillBlurCellEditorEmitter = new Emitter<void>();
@@ -120,6 +123,9 @@ export class NotebookCellModel implements NotebookCell, Disposable {
 
     @inject(NotebookMonacoTextModelService)
     protected readonly textModelService: NotebookMonacoTextModelService;
+
+    @inject(LanguageService)
+    protected readonly languageService: LanguageService;
 
     @inject(PreferenceService)
     protected readonly preferenceService: PreferenceService;
@@ -182,14 +188,17 @@ export class NotebookCellModel implements NotebookCell, Disposable {
             return;
         }
 
-        this.props.language = newLanguage;
         if (this.textModel) {
             this.textModel.setLanguageId(newLanguage);
         }
 
-        this.language = newLanguage;
+        this.props.language = newLanguage;
         this.onDidChangeLanguageEmitter.fire(newLanguage);
         this.onDidChangeContentEmitter.fire('language');
+    }
+
+    get languageName(): string {
+        return this.languageService.getLanguage(this.language)?.name ?? this.language;
     }
 
     get uri(): URI {
@@ -255,7 +264,6 @@ export class NotebookCellModel implements NotebookCell, Disposable {
         this.onDidChangeMetadataEmitter.dispose();
         this.onDidChangeInternalMetadataEmitter.dispose();
         this.onDidChangeLanguageEmitter.dispose();
-        this.textModel?.dispose();
         this.toDispose.dispose();
     }
 
@@ -271,9 +279,9 @@ export class NotebookCellModel implements NotebookCell, Disposable {
         this.onDidRequestCellEditChangeEmitter.fire(false);
     }
 
-    requestFocusEditor(): void {
+    requestFocusEditor(focusRequest?: CellEditorFocusRequest): void {
         this.requestEdit();
-        this.onWillFocusCellEditorEmitter.fire();
+        this.onWillFocusCellEditorEmitter.fire(focusRequest);
     }
 
     requestBlurEditor(): void {
@@ -347,9 +355,10 @@ export class NotebookCellModel implements NotebookCell, Disposable {
 
         const ref = await this.textModelService.getOrCreateNotebookCellModelReference(this.uri);
         this.textModel = ref.object;
-        this.textModel.onDidChangeContent(e => {
+        this.toDispose.push(ref);
+        this.toDispose.push(this.textModel.onDidChangeContent(e => {
             this.props.source = e.model.getText();
-        });
+        }));
         return ref.object;
     }
 

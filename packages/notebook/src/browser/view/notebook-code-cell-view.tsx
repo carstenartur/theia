@@ -24,11 +24,11 @@ import { NotebookModel } from '../view-model/notebook-model';
 import { CellEditor } from './notebook-cell-editor';
 import { CellRenderer } from './notebook-cell-list-view';
 import { NotebookCellToolbarFactory } from './notebook-cell-toolbar-factory';
-import { NotebookCellActionContribution } from '../contributions/notebook-cell-actions-contribution';
+import { NotebookCellActionContribution, NotebookCellCommands } from '../contributions/notebook-cell-actions-contribution';
 import { CellExecution, NotebookExecutionStateService } from '../service/notebook-execution-state-service';
 import { codicon } from '@theia/core/lib/browser';
 import { NotebookCellExecutionState } from '../../common';
-import { DisposableCollection, nls } from '@theia/core';
+import { CommandRegistry, DisposableCollection, nls } from '@theia/core';
 import { NotebookContextManager } from '../service/notebook-context-manager';
 import { NotebookViewportService } from './notebook-viewport-service';
 import { EditorPreferences } from '@theia/editor/lib/browser';
@@ -61,13 +61,19 @@ export class NotebookCodeCellRenderer implements CellRenderer {
     @inject(EditorPreferences)
     protected readonly editorPreferences: EditorPreferences;
 
+    @inject(CommandRegistry)
+    protected readonly commandRegistry: CommandRegistry;
+
     protected fontInfo: BareFontInfo | undefined;
 
     render(notebookModel: NotebookModel, cell: NotebookCellModel, handle: number): React.ReactNode {
         return <div>
             <div className='theia-notebook-cell-with-sidebar'>
                 <div className='theia-notebook-cell-sidebar'>
-                    {this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.CODE_CELL_SIDEBAR_MENU, notebookModel, cell)}
+                    {this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.CODE_CELL_SIDEBAR_MENU, cell, {
+                        contextMenuArgs: () => [cell], commandArgs: () => [notebookModel, cell]
+                    })
+                    }
                     <CodeCellExecutionOrder cell={cell} />
                 </div>
                 <div className='theia-notebook-cell-editor-container'>
@@ -76,15 +82,28 @@ export class NotebookCodeCellRenderer implements CellRenderer {
                         notebookContextManager={this.notebookContextManager}
                         notebookViewportService={this.notebookViewportService}
                         fontInfo={this.getOrCreateMonacoFontInfo()} />
-                    <NotebookCodeCellStatus cell={cell} executionStateService={this.executionStateService} onClick={() => cell.requestFocusEditor()}></NotebookCodeCellStatus>
+                    <NotebookCodeCellStatus cell={cell} notebook={notebookModel}
+                        commandRegistry={this.commandRegistry}
+                        executionStateService={this.executionStateService}
+                        onClick={() => cell.requestFocusEditor()} />
                 </div >
             </div >
             <div className='theia-notebook-cell-with-sidebar'>
                 <NotebookCodeCellOutputs cell={cell} notebook={notebookModel} outputWebviewFactory={this.cellOutputWebviewFactory}
                     renderSidebar={() =>
-                        this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.OUTPUT_SIDEBAR_MENU, notebookModel, cell, cell.outputs[0])} />
+                        this.notebookCellToolbarFactory.renderSidebar(NotebookCellActionContribution.OUTPUT_SIDEBAR_MENU, cell, {
+                            contextMenuArgs: () => [notebookModel, cell, cell.outputs[0]]
+                        })
+                    } />
             </div>
         </div >;
+    }
+
+    renderDragImage(cell: NotebookCellModel): HTMLElement {
+        const dragImage = document.createElement('div');
+        dragImage.className = 'theia-notebook-drag-image';
+        dragImage.textContent = nls.localize('theia/notebook/dragGhostImage/codeText', 'Code cell selected');
+        return dragImage;
     }
 
     protected getOrCreateMonacoFontInfo(): BareFontInfo {
@@ -108,7 +127,9 @@ export class NotebookCodeCellRenderer implements CellRenderer {
 }
 
 export interface NotebookCodeCellStatusProps {
+    notebook: NotebookModel;
     cell: NotebookCellModel;
+    commandRegistry: CommandRegistry;
     executionStateService: NotebookExecutionStateService;
     onClick: () => void;
 }
@@ -146,6 +167,10 @@ export class NotebookCodeCellStatus extends React.Component<NotebookCodeCellStat
                 }
             }
         }));
+
+        this.toDispose.push(props.cell.onDidChangeLanguage(() => {
+            this.forceUpdate();
+        }));
     }
 
     override componentWillUnmount(): void {
@@ -158,7 +183,9 @@ export class NotebookCodeCellStatus extends React.Component<NotebookCodeCellStat
                 {this.renderExecutionState()}
             </div>
             <div className='notebook-cell-status-right'>
-                <span>{this.props.cell.language}</span>
+                <span className='notebook-cell-language-label' onClick={() => {
+                    this.props.commandRegistry.executeCommand(NotebookCellCommands.CHANGE_CELL_LANGUAGE.id, this.props.notebook, this.props.cell);
+                }}>{this.props.cell.languageName}</span>
             </div>
         </div>;
     }

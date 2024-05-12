@@ -31,6 +31,7 @@ import { CellEditType, CellKind } from '../../common';
 import { NotebookEditorWidgetService } from '../service/notebook-editor-widget-service';
 import { NotebookCommands } from './notebook-actions-contribution';
 import { changeCellType } from './cell-operations';
+import { EditorLanguageQuickPickService } from '@theia/editor/lib/browser/editor-language-quick-pick-service';
 
 export namespace NotebookCellCommands {
     /** Parameters: notebookModel: NotebookModel | undefined, cell: NotebookCellModel */
@@ -119,16 +120,22 @@ export namespace NotebookCellCommands {
         label: 'Change Cell to Mardown'
     });
 
-    export const COLLAPSE_CELL_OUTPUT = Command.toDefaultLocalizedCommand({
-        id: 'notebook.cell.collapseCellOutput',
+    export const TOGGLE_CELL_OUTPUT = Command.toDefaultLocalizedCommand({
+        id: 'notebook.cell.toggleOutputs',
         category: 'Notebook',
         label: 'Collapse Cell Output',
     });
 
-    export const EXPAND_CELL_OUTPUT = Command.toDefaultLocalizedCommand({
-        id: 'notebook.cell.expandCellOutput',
+    export const CHANGE_CELL_LANGUAGE = Command.toDefaultLocalizedCommand({
+        id: 'notebook.cell.changeLanguage',
         category: 'Notebook',
-        label: 'Expand Cell Output',
+        label: 'Change Cell Language',
+    });
+
+    export const TOGGLE_LINE_NUMBERS = Command.toDefaultLocalizedCommand({
+        id: 'notebook.cell.toggleLineNumbers',
+        category: 'Notebook',
+        label: 'Show Cell Line Numbers',
     });
 
 }
@@ -144,6 +151,9 @@ export class NotebookCellActionContribution implements MenuContribution, Command
 
     @inject(NotebookEditorWidgetService)
     protected notebookEditorWidgetService: NotebookEditorWidgetService;
+
+    @inject(EditorLanguageQuickPickService)
+    protected languageQuickPickService: EditorLanguageQuickPickService;
 
     @postConstruct()
     protected init(): void {
@@ -314,7 +324,7 @@ export class NotebookCellActionContribution implements MenuContribution, Command
             }
         });
         commands.registerCommand(NotebookCellCommands.CLEAR_OUTPUTS_COMMAND, this.editableCellCommandHandler(
-            (notebook, cell) => notebook.applyEdits([{
+            (notebook, cell) => (notebook ?? this.notebookEditorWidgetService.focusedEditor?.model)?.applyEdits([{
                 editType: CellEditType.Output,
                 handle: cell.handle,
                 outputs: [],
@@ -341,20 +351,39 @@ export class NotebookCellActionContribution implements MenuContribution, Command
             changeCellType(notebookModel, cell, CellKind.Markup);
         }));
 
-        commands.registerCommand(NotebookCellCommands.COLLAPSE_CELL_OUTPUT, {
+        commands.registerCommand(NotebookCellCommands.TOGGLE_CELL_OUTPUT, {
             execute: () => {
                 const selectedCell = this.notebookEditorWidgetService.focusedEditor?.model?.selectedCell;
                 if (selectedCell) {
-                    selectedCell.outputVisible = false;
+                    selectedCell.outputVisible = !selectedCell.outputVisible;
                 }
             }
         });
 
-        commands.registerCommand(NotebookCellCommands.EXPAND_CELL_OUTPUT, {
+        commands.registerCommand(NotebookCellCommands.CHANGE_CELL_LANGUAGE, {
+            isVisible: () => !!this.notebookEditorWidgetService.focusedEditor?.model?.selectedCell,
+            execute: async (notebook?: NotebookModel, cell?: NotebookCellModel) => {
+                const selectedCell = cell ?? this.notebookEditorWidgetService.focusedEditor?.model?.selectedCell;
+                const activeNotebook = notebook ?? this.notebookEditorWidgetService.focusedEditor?.model;
+                if (selectedCell && activeNotebook) {
+                    const language = await this.languageQuickPickService.pickEditorLanguage(selectedCell.language);
+                    if (language?.value && language.value !== 'autoDetect') {
+                        this.notebookEditorWidgetService.focusedEditor?.model?.applyEdits([{
+                            editType: CellEditType.CellLanguage,
+                            index: activeNotebook.cells.indexOf(selectedCell),
+                            language: language.value.id
+                        }], true);
+                    }
+                }
+            }
+        });
+
+        commands.registerCommand(NotebookCellCommands.TOGGLE_LINE_NUMBERS, {
             execute: () => {
                 const selectedCell = this.notebookEditorWidgetService.focusedEditor?.model?.selectedCell;
                 if (selectedCell) {
-                    selectedCell.outputVisible = true;
+                    const currentLineNumber = selectedCell.editorOptions?.lineNumbers;
+                    selectedCell.editorOptions = { ...selectedCell.editorOptions, lineNumbers: !currentLineNumber || currentLineNumber === 'off' ? 'on' : 'off' };
                 }
             }
         });
@@ -382,7 +411,7 @@ export class NotebookCellActionContribution implements MenuContribution, Command
             {
                 command: NotebookCellCommands.EDIT_COMMAND.id,
                 keybinding: 'Enter',
-                when: `${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`,
+                when: `!editorTextFocus && ${NOTEBOOK_EDITOR_FOCUSED} && ${NOTEBOOK_CELL_FOCUSED}`,
             },
             {
                 command: NotebookCellCommands.STOP_EDIT_COMMAND.id,

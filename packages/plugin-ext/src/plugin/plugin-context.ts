@@ -198,12 +198,19 @@ import {
     TextMergeTabInput,
     WebviewEditorTabInput,
     DocumentPasteEdit,
+    DocumentPasteEditKind,
+    DocumentPasteTriggerKind,
     ExternalUriOpenerPriority,
     EditSessionIdentityMatch,
     TerminalOutputAnchor,
     TerminalQuickFixTerminalCommand,
     TerminalQuickFixOpener,
-    TestResultState
+    TestResultState,
+    BranchCoverage,
+    DeclarationCoverage,
+    FileCoverage,
+    StatementCoverage,
+    TestCoverageCount
 } from './types-impl';
 import { AuthenticationExtImpl } from './authentication-ext';
 import { SymbolKind } from '../common/plugin-api-rpc-model';
@@ -1211,9 +1218,17 @@ export function createAPIFactory(
             }
         };
 
+        const chat: typeof theia.chat    = {
+            /** @stubbed MappedEditsProvider */
+            registerMappedEditsProvider(documentSelector: theia.DocumentSelector, provider: theia.MappedEditsProvider): Disposable {
+                return Disposable.NULL;
+            }
+        };
+
         return <typeof theia>{
             version: require('../../package.json').version,
             authentication,
+            chat,
             commands,
             comments,
             window,
@@ -1398,11 +1413,18 @@ export function createAPIFactory(
             TerminalOutputAnchor,
             TerminalExitReason,
             DocumentPasteEdit,
+            DocumentPasteEditKind,
+            DocumentPasteTriggerKind,
             ExternalUriOpenerPriority,
             TerminalQuickFixTerminalCommand,
             TerminalQuickFixOpener,
             EditSessionIdentityMatch,
-            TestResultState
+            TestResultState,
+            BranchCoverage,
+            DeclarationCoverage,
+            FileCoverage,
+            StatementCoverage,
+            TestCoverageCount
         };
     };
 }
