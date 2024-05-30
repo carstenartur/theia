@@ -79,7 +79,7 @@ export class URI extends CodeURI implements theia.Uri {
      */
     static override revive(data: UriComponents | CodeURI): URI;
     static override revive(data: UriComponents | CodeURI | null): URI | null;
-    static override revive(data: UriComponents | CodeURI | undefined): URI | undefined
+    static override revive(data: UriComponents | CodeURI | undefined): URI | undefined;
     static override revive(data: UriComponents | CodeURI | undefined | null): URI | undefined | null {
         const uri = CodeURI.revive(data);
         return uri ? new URI(uri) : undefined;
@@ -882,7 +882,7 @@ export class TextEdit {
 
     protected _range: Range;
     protected _newText: string;
-    protected _newEol: EndOfLine;
+    protected _newEol: EndOfLine | undefined;
 
     get range(): Range {
         return this._range;
@@ -906,7 +906,7 @@ export class TextEdit {
         this._newText = value;
     }
 
-    get newEol(): EndOfLine {
+    get newEol(): EndOfLine | undefined {
         return this._newEol;
     }
 
@@ -1642,11 +1642,34 @@ export class DocumentLink {
 }
 
 @es5ClassCompat
+export class DocumentDropOrPasteEditKind {
+    static readonly Empty: DocumentDropOrPasteEditKind = new DocumentDropOrPasteEditKind('');
+
+    private static sep = '.';
+
+    constructor(
+        public readonly value: string
+    ) { }
+
+    public append(...parts: string[]): DocumentDropOrPasteEditKind {
+        return new DocumentDropOrPasteEditKind((this.value ? [this.value, ...parts] : parts).join(DocumentDropOrPasteEditKind.sep));
+    }
+
+    public intersects(other: DocumentDropOrPasteEditKind): boolean {
+        return this.contains(other) || other.contains(this);
+    }
+
+    public contains(other: DocumentDropOrPasteEditKind): boolean {
+        return this.value === other.value || other.value.startsWith(this.value + DocumentDropOrPasteEditKind.sep);
+    }
+}
+
+@es5ClassCompat
 export class DocumentDropEdit {
     title?: string;
-    kind: DocumentPasteEditKind;
+    kind: DocumentDropOrPasteEditKind;
     handledMimeType?: string;
-    yieldTo?: ReadonlyArray<DocumentPasteEditKind>;
+    yieldTo?: ReadonlyArray<DocumentDropOrPasteEditKind>;
     insertText: string | SnippetString;
     additionalEdit?: WorkspaceEdit;
 
@@ -2060,8 +2083,8 @@ export class TreeItem {
         readonly accessibilityInformation?: AccessibilityInformation
     };
 
-    constructor(label: string | theia.TreeItemLabel, collapsibleState?: theia.TreeItemCollapsibleState)
-    constructor(resourceUri: URI, collapsibleState?: theia.TreeItemCollapsibleState)
+    constructor(label: string | theia.TreeItemLabel, collapsibleState?: theia.TreeItemCollapsibleState);
+    constructor(resourceUri: URI, collapsibleState?: theia.TreeItemCollapsibleState);
     constructor(arg1: string | theia.TreeItemLabel | URI, public collapsibleState: theia.TreeItemCollapsibleState = TreeItemCollapsibleState.None) {
         if (arg1 instanceof URI) {
             this.resourceUri = arg1;
@@ -3760,16 +3783,16 @@ DocumentPasteEditKind.Empty = new DocumentPasteEditKind('');
 
 @es5ClassCompat
 export class DocumentPasteEdit {
-    constructor(insertText: string | SnippetString, title: string, kind: DocumentPasteEditKind) {
+    constructor(insertText: string | SnippetString, title: string, kind: DocumentDropOrPasteEditKind) {
         this.insertText = insertText;
         this.title = title;
         this.kind = kind;
     }
     title: string;
-    kind: DocumentPasteEditKind;
+    kind: DocumentDropOrPasteEditKind;
     insertText: string | SnippetString;
     additionalEdit?: WorkspaceEdit;
-    yieldTo?: readonly DocumentPasteEditKind[];
+    yieldTo?: ReadonlyArray<DocumentDropOrPasteEditKind>;
 }
 
 /**
