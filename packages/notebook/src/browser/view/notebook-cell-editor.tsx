@@ -25,6 +25,7 @@ import { NotebookContextManager } from '../service/notebook-context-manager';
 import { DisposableCollection, OS } from '@theia/core';
 import { NotebookViewportService } from './notebook-viewport-service';
 import { BareFontInfo } from '@theia/monaco-editor-core/esm/vs/editor/common/config/fontInfo';
+import { NOTEBOOK_CELL_CURSOR_FIRST_LINE, NOTEBOOK_CELL_CURSOR_LAST_LINE } from '../contributions/notebook-context-keys';
 
 interface CellEditorProps {
     notebookModel: NotebookModel,
@@ -42,7 +43,8 @@ const DEFAULT_EDITOR_OPTIONS: MonacoEditor.IOptions = {
     scrollbar: {
         ...MonacoEditorProvider.inlineOptions.scrollbar,
         alwaysConsumeMouseWheel: false
-    }
+    },
+    lineDecorationsWidth: 10,
 };
 
 export class CellEditor extends React.Component<CellEditorProps, {}> {
@@ -53,14 +55,32 @@ export class CellEditor extends React.Component<CellEditorProps, {}> {
 
     override componentDidMount(): void {
         this.disposeEditor();
-        this.toDispose.push(this.props.cell.onWillFocusCellEditor(() => {
+        this.toDispose.push(this.props.cell.onWillFocusCellEditor(focusRequest => {
             this.editor?.getControl().focus();
+            const lineCount = this.editor?.getControl().getModel()?.getLineCount();
+            if (focusRequest && lineCount) {
+                this.editor?.getControl().setPosition(focusRequest === 'lastLine' ?
+                    { lineNumber: lineCount, column: 1 } :
+                    { lineNumber: focusRequest, column: 1 },
+                    'keyboard');
+            }
+            const currentLine = this.editor?.getControl().getPosition()?.lineNumber;
+            this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_FIRST_LINE, currentLine === 1);
+            this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_LAST_LINE, currentLine === lineCount);
+
         }));
-        this.toDispose.push(this.props.notebookModel.onDidChangeSelectedCell(() => {
-            if (this.props.notebookModel.selectedCell !== this.props.cell && this.editor?.getControl().hasTextFocus()) {
-                if (document.activeElement && 'blur' in document.activeElement) {
-                    (document.activeElement as HTMLElement).blur();
-                }
+
+        this.toDispose.push(this.props.cell.onDidChangeEditorOptions(options => {
+            this.editor?.getControl().updateOptions(options);
+        }));
+
+        this.toDispose.push(this.props.cell.onDidChangeLanguage(language => {
+            this.editor?.setLanguage(language);
+        }));
+
+        this.toDispose.push(this.props.notebookModel.onDidChangeSelectedCell(e => {
+            if (e.cell !== this.props.cell && this.editor?.getControl().hasTextFocus()) {
+                this.props.notebookContextManager.context?.focus();
             }
         }));
         if (!this.props.notebookViewportService || (this.container && this.props.notebookViewportService.isElementInViewport(this.container))) {
@@ -96,7 +116,7 @@ export class CellEditor extends React.Component<CellEditorProps, {}> {
                 editorModel,
                 editorNode,
                 monacoServices,
-                DEFAULT_EDITOR_OPTIONS,
+                { ...DEFAULT_EDITOR_OPTIONS, ...cell.editorOptions },
                 [[IContextKeyService, this.props.notebookContextManager.scopedStore]]);
             this.toDispose.push(this.editor);
             this.editor.setLanguage(cell.language);
@@ -109,9 +129,20 @@ export class CellEditor extends React.Component<CellEditorProps, {}> {
             }));
             this.toDispose.push(this.editor.getControl().onDidFocusEditorText(() => {
                 this.props.notebookContextManager.onDidEditorTextFocus(true);
+                this.props.notebookModel.setSelectedCell(cell, false);
             }));
             this.toDispose.push(this.editor.getControl().onDidBlurEditorText(() => {
                 this.props.notebookContextManager.onDidEditorTextFocus(false);
+            }));
+            this.toDispose.push(this.editor.getControl().onDidChangeCursorPosition(e => {
+                if (e.secondaryPositions.length === 0) {
+                    this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_FIRST_LINE, e.position.lineNumber === 1);
+                    this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_LAST_LINE,
+                        e.position.lineNumber === this.editor!.getControl().getModel()!.getLineCount());
+                } else {
+                    this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_FIRST_LINE, false);
+                    this.props.notebookContextManager.scopedStore.setContext(NOTEBOOK_CELL_CURSOR_LAST_LINE, false);
+                }
             }));
             if (cell.editing && notebookModel.selectedCell === cell) {
                 this.editor.getControl().focus();

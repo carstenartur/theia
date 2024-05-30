@@ -64,7 +64,7 @@ describe('TypeScript', function () {
     const rootUri = workspaceService.tryGetRoots()[0].resource;
     const demoFileUri = rootUri.resolveToAbsolute('../api-tests/test-ts-workspace/demo-file.ts');
     const definitionFileUri = rootUri.resolveToAbsolute('../api-tests/test-ts-workspace/demo-definitions-file.ts');
-    let originalAutoSaveValue = preferences.inspect('files.autoSave').globalValue;
+    let originalAutoSaveValue = preferences.get('files.autoSave');
 
     before(async function () {
         await pluginService.didStart;
@@ -73,8 +73,9 @@ describe('TypeScript', function () {
                 throw new Error(pluginId + ' should be started');
             }
             await pluginService.activatePlugin(pluginId);
-        }).concat(preferences.set('files.autoSave', 'off', PreferenceScope.User)));
-        await preferences.set('files.refactoring.autoSave', 'off', PreferenceScope.User);
+        }));
+        await preferences.set('files.autoSave', 'off');
+        await preferences.set('files.refactoring.autoSave', 'off');
     });
 
     beforeEach(async function () {
@@ -90,7 +91,7 @@ describe('TypeScript', function () {
     });
 
     after(async () => {
-        await preferences.set('files.autoSave', originalAutoSaveValue, PreferenceScope.User);
+        await preferences.set('files.autoSave', originalAutoSaveValue);
     })
 
     /**
@@ -102,10 +103,10 @@ describe('TypeScript', function () {
         const editorWidget = widget instanceof EditorWidget ? widget : undefined;
         const editor = MonacoEditor.get(editorWidget);
         assert.isDefined(editor);
+        await timeout(1000); // workaround for https://github.com/eclipse-theia/theia/issues/13679
         // wait till tsserver is running, see:
         // https://github.com/microsoft/vscode/blob/93cbbc5cae50e9f5f5046343c751b6d010468200/extensions/typescript-language-features/src/extension.ts#L98-L103
-        await waitForAnimation(() => contextKeyService.match('typescript.isManagedFile'));
-        // wait till projects are loaded, see:
+        // await waitForAnimation(() => contextKeyService.match('typescript.isManagedFile'));
         // https://github.com/microsoft/vscode/blob/4aac84268c6226d23828cc6a1fe45ee3982927f0/extensions/typescript-language-features/src/typescriptServiceClient.ts#L911
         await waitForAnimation(() => !progressStatusBarItem.currentProgress);
         return /** @type {MonacoEditor} */ (editor);
@@ -210,16 +211,8 @@ describe('TypeScript', function () {
         await assertPeekOpened(editor);
 
         console.log('closePeek() - Attempt to close by sending "Escape"');
-        keybindings.dispatchKeyDown('Escape');
-        await waitForAnimation(() => {
-            const isClosed = !contextKeyService.match('listFocus');
-            if (!isClosed) {
-                console.log('...');
-                keybindings.dispatchKeyDown('Escape');
-                return false;
-            }
-            return true;
-        });
+        await dismissWithEscape('listFocus');
+
         assert.isTrue(contextKeyService.match('editorTextFocus'));
         assert.isFalse(contextKeyService.match('referenceSearchVisible'));
         assert.isFalse(contextKeyService.match('listFocus'));
@@ -510,7 +503,23 @@ describe('TypeScript', function () {
         assert.equal(activeEditor.getControl().getModel().getWordAtPosition({ lineNumber: 28, column: 1 }).word, 'foo');
     });
 
+    async function dismissWithEscape(contextKey) {
+        keybindings.dispatchKeyDown('Escape');
+        // once in a while, a second "Escape" is needed to dismiss widget
+        return waitForAnimation(() => {
+            const suggestWidgetDismissed = !contextKeyService.match(contextKey);
+            if (!suggestWidgetDismissed) {
+                console.log(`Re-try to dismiss ${contextKey} using "Escape" key`);
+                keybindings.dispatchKeyDown('Escape');
+                return false;
+            }
+            return true;
+        }, 5000, `${contextKey} widget not dismissed`);
+    }
+
     it('editor.action.triggerParameterHints', async function () {
+        this.timeout(30000);
+        console.log('start trigger parameter hint');
         const editor = await openEditor(demoFileUri);
         // const demoInstance = new DemoClass('|demo');
         editor.getControl().setPosition({ lineNumber: 24, column: 37 });
@@ -520,13 +529,14 @@ describe('TypeScript', function () {
         assert.isFalse(contextKeyService.match('parameterHintsVisible'));
 
         await commands.executeCommand('editor.action.triggerParameterHints');
+        console.log('trigger command');
         await waitForAnimation(() => contextKeyService.match('parameterHintsVisible'));
+        console.log('context key matched');
 
         assert.isTrue(contextKeyService.match('editorTextFocus'));
         assert.isTrue(contextKeyService.match('parameterHintsVisible'));
 
-        keybindings.dispatchKeyDown('Escape');
-        await waitForAnimation(() => !contextKeyService.match('parameterHintsVisible'));
+        await dismissWithEscape('parameterHintsVisible');
 
         assert.isTrue(contextKeyService.match('editorTextFocus'));
         assert.isFalse(contextKeyService.match('parameterHintsVisible'));
@@ -542,12 +552,13 @@ describe('TypeScript', function () {
         const hover = editor.getControl().getContribution('editor.contrib.hover');
 
         assert.isTrue(contextKeyService.match('editorTextFocus'));
-        assert.isFalse(Boolean(hover['_contentWidget']?.['_widget']?.['_visibleData']));
+        assert.isFalse(contextKeyService.match('editorHoverVisible'));
         await commands.executeCommand('editor.action.showHover');
         let doLog = true;
-        await waitForAnimation(() => hover['_contentWidget']?.['_widget']?.['_visibleData']);
+        await waitForAnimation(() => contextKeyService.match('editorHoverVisible'));
+        assert.isTrue(contextKeyService.match('editorHoverVisible'));
         assert.isTrue(contextKeyService.match('editorTextFocus'));
-        assert.isTrue(Boolean(hover['_contentWidget']?.['_widget']?.['_visibleData']));
+
         assert.deepEqual(nodeAsString(hover['_contentWidget']?.['_widget']?.['_hover']?.['contentsDomNode']).trim(), `
 DIV {
   DIV {
@@ -572,8 +583,7 @@ DIV {
     }
   }
 }`.trim());
-        keybindings.dispatchKeyDown('Escape');
-        await waitForAnimation(() => !hover['_contentWidget']?.['_widget']?.['_visibleData']);
+        await dismissWithEscape('editorHoverVisible');
         assert.isTrue(contextKeyService.match('editorTextFocus'));
         assert.isFalse(Boolean(hover['_contentWidget']?.['_widget']?.['_visibleData']));
     });

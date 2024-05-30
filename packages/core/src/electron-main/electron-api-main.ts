@@ -53,7 +53,8 @@ import {
     CHANNEL_REQUEST_SECONDARY_CLOSE,
     CHANNEL_SET_BACKGROUND_COLOR,
     CHANNEL_WC_METADATA,
-    CHANNEL_ABOUT_TO_CLOSE
+    CHANNEL_ABOUT_TO_CLOSE,
+    CHANNEL_OPEN_WITH_SYSTEM_APP
 } from '../electron-common/electron-api';
 import { ElectronMainApplication, ElectronMainApplicationContribution } from './electron-main-application';
 import { Disposable, DisposableCollection, isOSX, MaybePromise } from '../common';
@@ -147,7 +148,9 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
 
         // focus windows for secondary window support
         ipcMain.on(CHANNEL_FOCUS_WINDOW, (event, windowName) => {
-            const electronWindow = BrowserWindow.getAllWindows().find(win => win.webContents.mainFrame.name === windowName);
+            const electronWindow = windowName
+                ? BrowserWindow.getAllWindows().find(win => win.webContents.mainFrame.name === windowName)
+                : BrowserWindow.fromWebContents(event.sender);
             if (electronWindow) {
                 if (electronWindow.isMinimized()) {
                     electronWindow.restore();
@@ -160,6 +163,10 @@ export class TheiaMainApi implements ElectronMainApplicationContribution {
 
         ipcMain.on(CHANNEL_SHOW_ITEM_IN_FOLDER, (event, fsPath) => {
             shell.showItemInFolder(fsPath);
+        });
+
+        ipcMain.on(CHANNEL_OPEN_WITH_SYSTEM_APP, (event, fsPath) => {
+            shell.openPath(fsPath);
         });
 
         ipcMain.handle(CHANNEL_GET_TITLE_STYLE_AT_STARTUP, event => application.getTitleBarStyleAtStartup(event.sender));

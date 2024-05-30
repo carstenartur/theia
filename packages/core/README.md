@@ -70,7 +70,7 @@ export class SomeClass {
 
 - `@theia/core/electron-shared/...`
     - `native-keymap` (from [`native-keymap@^2.2.1`](https://www.npmjs.com/package/native-keymap))
-    - `electron` (from [`electron@^23.2.4`](https://www.npmjs.com/package/electron))
+    - `electron` (from [`electron@^28.2.8`](https://www.npmjs.com/package/electron))
     - `electron-store` (from [`electron-store@^8.0.0`](https://www.npmjs.com/package/electron-store))
     - `fix-path` (from [`fix-path@^3.0.0`](https://www.npmjs.com/package/fix-path))
 - `@theia/core/shared/...`
@@ -84,12 +84,12 @@ export class SomeClass {
     - `@phosphor/signaling` (from [`@phosphor/signaling@1`](https://www.npmjs.com/package/@phosphor/signaling))
     - `@phosphor/virtualdom` (from [`@phosphor/virtualdom@1`](https://www.npmjs.com/package/@phosphor/virtualdom))
     - `@phosphor/widgets` (from [`@phosphor/widgets@1`](https://www.npmjs.com/package/@phosphor/widgets))
-    - `@theia/application-package` (from [`@theia/application-package@1.48.0`](https://www.npmjs.com/package/@theia/application-package/v/1.48.0))
-    - `@theia/application-package/lib/api` (from [`@theia/application-package@1.48.0`](https://www.npmjs.com/package/@theia/application-package/v/1.48.0))
-    - `@theia/application-package/lib/environment` (from [`@theia/application-package@1.48.0`](https://www.npmjs.com/package/@theia/application-package/v/1.48.0))
-    - `@theia/request` (from [`@theia/request@1.48.0`](https://www.npmjs.com/package/@theia/request/v/1.48.0))
-    - `@theia/request/lib/proxy` (from [`@theia/request@1.48.0`](https://www.npmjs.com/package/@theia/request/v/1.48.0))
-    - `@theia/request/lib/node-request-service` (from [`@theia/request@1.48.0`](https://www.npmjs.com/package/@theia/request/v/1.48.0))
+    - `@theia/application-package` (from [`@theia/application-package@1.49.0`](https://www.npmjs.com/package/@theia/application-package/v/1.49.0))
+    - `@theia/application-package/lib/api` (from [`@theia/application-package@1.49.0`](https://www.npmjs.com/package/@theia/application-package/v/1.49.0))
+    - `@theia/application-package/lib/environment` (from [`@theia/application-package@1.49.0`](https://www.npmjs.com/package/@theia/application-package/v/1.49.0))
+    - `@theia/request` (from [`@theia/request@1.49.0`](https://www.npmjs.com/package/@theia/request/v/1.49.0))
+    - `@theia/request/lib/proxy` (from [`@theia/request@1.49.0`](https://www.npmjs.com/package/@theia/request/v/1.49.0))
+    - `@theia/request/lib/node-request-service` (from [`@theia/request@1.49.0`](https://www.npmjs.com/package/@theia/request/v/1.49.0))
     - `fs-extra` (from [`fs-extra@^4.0.2`](https://www.npmjs.com/package/fs-extra))
     - `fuzzy` (from [`fuzzy@^0.1.3`](https://www.npmjs.com/package/fuzzy))
     - `inversify` (from [`inversify@^6.0.1`](https://www.npmjs.com/package/inversify))

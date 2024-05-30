@@ -79,8 +79,15 @@ import { WindowService } from '@theia/core/lib/browser/window/window-service';
 import * as monaco from '@theia/monaco-editor-core';
 import { VSCodeExtensionUri } from '../common/plugin-vscode-uri';
 import { CodeEditorWidgetUtil } from '@theia/plugin-ext/lib/main/browser/menus/vscode-theia-menu-mappings';
+import { OutlineViewContribution } from '@theia/outline-view/lib/browser/outline-view-contribution';
 
 export namespace VscodeCommands {
+
+    export const GET_CODE_EXCHANGE_ENDPOINTS: Command = {
+        id: 'workbench.getCodeExchangeProxyEndpoints' // this command is used in the github auth built-in
+        // see: https://github.com/microsoft/vscode/blob/191be39e5ac872e03f9d79cc859d9917f40ad935/extensions/github-authentication/src/githubServer.ts#L60
+    };
+
     export const OPEN: Command = {
         id: 'vscode.open'
     };
@@ -180,6 +187,8 @@ export class PluginVscodeCommandsContribution implements CommandContribution {
     protected readonly windowService: WindowService;
     @inject(MessageService)
     protected readonly messageService: MessageService;
+    @inject(OutlineViewContribution)
+    protected outlineViewContribution: OutlineViewContribution;
 
     private async openWith(commandId: string, resource: URI, columnOrOptions?: ViewColumn | TextDocumentShowOptions, openerId?: string): Promise<boolean> {
         if (!resource) {
@@ -227,6 +236,10 @@ export class PluginVscodeCommandsContribution implements CommandContribution {
     }
 
     registerCommands(commands: CommandRegistry): void {
+        commands.registerCommand(VscodeCommands.GET_CODE_EXCHANGE_ENDPOINTS, {
+            execute: () => undefined // this is a dummy implementation: only used in the case of web apps, which is not supported yet.
+        });
+
         commands.registerCommand(VscodeCommands.OPEN, {
             isVisible: () => false,
             execute: async (resource: URI | string, columnOrOptions?: ViewColumn | TextDocumentShowOptions) => {
@@ -911,6 +924,11 @@ export class PluginVscodeCommandsContribution implements CommandContribution {
                     collections: device.collections
                 };
             }
+        });
+
+        // required by Jupyter for the show table of contents action
+        commands.registerCommand({ id: 'outline.focus' }, {
+            execute: () => this.outlineViewContribution.openView({ activate: true })
         });
     }
 
