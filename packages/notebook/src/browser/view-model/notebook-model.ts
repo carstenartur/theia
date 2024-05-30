@@ -33,6 +33,7 @@ import { NotebookCellModel, NotebookCellModelFactory } from './notebook-cell-mod
 import { inject, injectable, interfaces, postConstruct } from '@theia/core/shared/inversify';
 import { UndoRedoService } from '@theia/editor/lib/browser/undo-redo-service';
 import { MarkdownString } from '@theia/core/lib/common/markdown-rendering';
+import type { NotebookModelResolverService } from '../service/notebook-model-resolver-service';
 
 export const NotebookModelFactory = Symbol('NotebookModelFactory');
 
@@ -45,12 +46,19 @@ export function createNotebookModelContainer(parent: interfaces.Container, props
     return child;
 }
 
+export const NotebookModelResolverServiceProxy = Symbol('NotebookModelResolverServiceProxy');
+
 const NotebookModelProps = Symbol('NotebookModelProps');
 export interface NotebookModelProps {
     data: NotebookData;
     resource: Resource;
     viewType: string;
     serializer: NotebookSerializer;
+}
+
+export interface SelectedCellChangeEvent {
+    cell: NotebookCellModel | undefined;
+    scrollIntoView: boolean;
 }
 
 @injectable()
@@ -68,7 +76,10 @@ export class NotebookModel implements Saveable, Disposable {
     protected readonly onDidChangeContentEmitter = new QueueableEmitter<NotebookContentChangedEvent>();
     readonly onDidChangeContent = this.onDidChangeContentEmitter.event;
 
-    protected readonly onDidChangeSelectedCellEmitter = new Emitter<NotebookCellModel | undefined>();
+    protected readonly onContentChangedEmitter = new Emitter<void>();
+    readonly onContentChanged = this.onContentChangedEmitter.event;
+
+    protected readonly onDidChangeSelectedCellEmitter = new Emitter<SelectedCellChangeEvent>();
     readonly onDidChangeSelectedCell = this.onDidChangeSelectedCellEmitter.event;
 
     protected readonly onDidDisposeEmitter = new Emitter<void>();
@@ -89,15 +100,20 @@ export class NotebookModel implements Saveable, Disposable {
 
     @inject(NotebookCellModelFactory)
     protected cellModelFactory: NotebookCellModelFactory;
-    readonly autoSave: 'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange';
+
+    @inject(NotebookModelResolverServiceProxy)
+    protected modelResolverService: NotebookModelResolverService;
 
     protected nextHandle: number = 0;
 
     protected _dirty = false;
 
     set dirty(dirty: boolean) {
+        const oldState = this._dirty;
         this._dirty = dirty;
-        this.onDirtyChangedEmitter.fire();
+        if (oldState !== dirty) {
+            this.onDirtyChangedEmitter.fire();
+        }
     }
 
     get dirty(): boolean {
@@ -160,24 +176,16 @@ export class NotebookModel implements Saveable, Disposable {
         this.dirtyCells = [];
         this.dirty = false;
 
-        const serializedNotebook = await this.props.serializer.fromNotebook({
-            cells: this.cells.map(cell => cell.getData()),
-            metadata: this.metadata
-        });
+        const data = this.getData();
+        const serializedNotebook = await this.props.serializer.fromNotebook(data);
         this.fileService.writeFile(this.uri, serializedNotebook);
 
         this.onDidSaveNotebookEmitter.fire();
     }
 
     createSnapshot(): Saveable.Snapshot {
-        const model = this;
         return {
-            read(): string {
-                return JSON.stringify({
-                    cells: model.cells.map(cell => cell.getData()),
-                    metadata: model.metadata
-                });
-            }
+            read: () => JSON.stringify(this.getData())
         };
     }
 
@@ -191,6 +199,15 @@ export class NotebookModel implements Saveable, Disposable {
     }
 
     async revert(options?: Saveable.RevertOptions): Promise<void> {
+        if (!options?.soft) {
+            // Load the data from the file again
+            try {
+                const data = await this.modelResolverService.resolveExistingNotebookData(this.props.resource, this.props.viewType);
+                this.setData(data, false);
+            } catch (err) {
+                console.error('Failed to revert notebook', err);
+            }
+        }
         this.dirty = false;
     }
 
@@ -205,19 +222,23 @@ export class NotebookModel implements Saveable, Disposable {
             this.dirtyCells.splice(this.dirtyCells.indexOf(cell), 1);
         }
 
-        const oldDirtyState = this._dirty;
-        this._dirty = this.dirtyCells.length > 0;
-        if (this.dirty !== oldDirtyState) {
-            this.onDirtyChangedEmitter.fire();
-        }
+        this.dirty = this.dirtyCells.length > 0;
     }
 
-    setData(data: NotebookData): void {
+    setData(data: NotebookData, markDirty = true): void {
         // Replace all cells in the model
+        this.dirtyCells = [];
         this.replaceCells(0, this.cells.length, data.cells, false);
         this.metadata = data.metadata;
-        this.dirty = false;
+        this.dirty = markDirty;
         this.onDidChangeContentEmitter.fire();
+    }
+
+    getData(): NotebookData {
+        return {
+            cells: this.cells.map(cell => cell.getData()),
+            metadata: this.metadata
+        };
     }
 
     undo(): void {
@@ -230,10 +251,10 @@ export class NotebookModel implements Saveable, Disposable {
         this.undoRedoService.redo(this.uri);
     }
 
-    setSelectedCell(cell: NotebookCellModel): void {
+    setSelectedCell(cell: NotebookCellModel, scrollIntoView?: boolean): void {
         if (this.selectedCell !== cell) {
             this.selectedCell = cell;
-            this.onDidChangeSelectedCellEmitter.fire(cell);
+            this.onDidChangeSelectedCellEmitter.fire({ cell, scrollIntoView: scrollIntoView ?? true });
         }
     }
 
@@ -262,16 +283,19 @@ export class NotebookModel implements Saveable, Disposable {
                 end: edit.editType === CellEditType.Replace ? edit.index + edit.count : cellIndex,
                 originalIndex: index
             };
-        }).filter(edit => !!edit);
+        });
 
         for (const { edit, cellIndex } of editsWithDetails) {
             const cell = this.cells[cellIndex];
             if (cell) {
                 this.cellDirtyChanged(cell, true);
             }
+
+            let scrollIntoView = true;
             switch (edit.editType) {
                 case CellEditType.Replace:
                     this.replaceCells(edit.index, edit.count, edit.cells, computeUndoRedo);
+                    scrollIntoView = edit.cells.length > 0;
                     break;
                 case CellEditType.Output: {
                     if (edit.append) {
@@ -314,12 +338,12 @@ export class NotebookModel implements Saveable, Disposable {
 
             // if selected cell is affected update it because it can potentially have been replaced
             if (cell === this.selectedCell) {
-                this.setSelectedCell(this.cells[cellIndex]);
+                this.setSelectedCell(this.cells[Math.min(cellIndex, this.cells.length - 1)], scrollIntoView);
             }
         }
 
         this.onDidChangeContentEmitter.fire();
-
+        this.onContentChangedEmitter.fire();
     }
 
     protected replaceCells(start: number, deleteCount: number, newCells: CellData[], computeUndoRedo: boolean): void {

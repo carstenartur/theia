@@ -126,7 +126,7 @@ import { DockPanel, RendererHost } from './widgets';
 import { TooltipService, TooltipServiceImpl } from './tooltip-service';
 import { BackendRequestService, RequestService, REQUEST_SERVICE_PATH } from '@theia/request';
 import { bindFrontendStopwatch, bindBackendStopwatch } from './performance';
-import { SaveResourceService } from './save-resource-service';
+import { SaveableService } from './saveable-service';
 import { SecondaryWindowHandler } from './secondary-window-handler';
 import { UserWorkingDirectoryProvider } from './user-working-directory-provider';
 import { WindowTitleService } from './window/window-title-service';
@@ -141,6 +141,7 @@ import { AdditionalViewsMenuWidget, AdditionalViewsMenuWidgetFactory } from './s
 import { LanguageIconLabelProvider } from './language-icon-provider';
 import { bindTreePreferences } from './tree';
 import { OpenWithService } from './open-with-service';
+import { ViewColumnService } from './shell/view-column-service';
 
 export { bindResourceProvider, bindMessageService, bindPreferenceService };
 
@@ -449,7 +450,9 @@ export const frontendApplicationModule = new ContainerModule((bind, _unbind, _is
     bindFrontendStopwatch(bind);
     bindBackendStopwatch(bind);
 
-    bind(SaveResourceService).toSelf().inSingletonScope();
+    bind(SaveableService).toSelf().inSingletonScope();
+    bind(FrontendApplicationContribution).toService(SaveableService);
+
     bind(UserWorkingDirectoryProvider).toSelf().inSingletonScope();
     bind(FrontendApplicationContribution).toService(UserWorkingDirectoryProvider);
 
@@ -460,4 +463,6 @@ export const frontendApplicationModule = new ContainerModule((bind, _unbind, _is
     bind(FrontendApplicationContribution).toService(StylingService);
 
     bind(SecondaryWindowHandler).toSelf().inSingletonScope();
+
+    bind(ViewColumnService).toSelf().inSingletonScope();
 });

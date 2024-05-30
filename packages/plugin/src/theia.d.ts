@@ -26,7 +26,6 @@ import './theia.proposed.canonicalUriProvider';
 import './theia.proposed.customEditorMove';
 import './theia.proposed.diffCommand';
 import './theia.proposed.documentPaste';
-import './theia.proposed.dropMetadata';
 import './theia.proposed.editSessionIdentityProvider';
 import './theia.proposed.extensionsAny';
 import './theia.proposed.externalUriOpener';
@@ -2741,6 +2740,12 @@ export module '@theia/plugin' {
          * Whether the current window is focused.
          */
         readonly focused: boolean;
+
+        /**
+         * Whether the window has been interacted with recently. This will change
+         * immediately on activity, or after a short time of user inactivity.
+         */
+        readonly active: boolean;
     }
 
     /**
@@ -7910,7 +7915,7 @@ export module '@theia/plugin' {
          * @param pattern A file glob pattern like `*.{ts,js}` that will be matched on file paths
          * relative to the base path.
          */
-        constructor(base: WorkspaceFolder | Uri | string, pattern: string)
+        constructor(base: WorkspaceFolder | Uri | string, pattern: string);
     }
 
     /**
