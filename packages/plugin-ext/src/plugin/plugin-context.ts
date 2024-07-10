@@ -19,7 +19,7 @@
 
 import type * as theia from '@theia/plugin';
 import { CommandRegistryImpl } from './command-registry';
-import { Emitter } from '@theia/core/lib/common/event';
+import { Emitter, Event } from '@theia/core/lib/common/event';
 import { CancellationError, CancellationToken, CancellationTokenSource } from '@theia/core/lib/common/cancellation';
 import { QuickOpenExtImpl } from './quick-open';
 import {
@@ -124,6 +124,8 @@ import {
     Breakpoint,
     SourceBreakpoint,
     FunctionBreakpoint,
+    DebugStackFrame,
+    DebugThread,
     FoldingRange,
     FoldingRangeKind,
     SelectionRange,
@@ -211,7 +213,19 @@ import {
     DeclarationCoverage,
     FileCoverage,
     StatementCoverage,
-    TestCoverageCount
+    TestCoverageCount,
+    ChatRequestTurn,
+    ChatResponseTurn,
+    ChatResponseAnchorPart,
+    ChatResponseCommandButtonPart,
+    ChatResponseFileTreePart,
+    ChatResponseMarkdownPart,
+    ChatResponseProgressPart,
+    ChatResponseReferencePart,
+    ChatResultFeedbackKind,
+    LanguageModelChatMessage,
+    LanguageModelChatMessageRole,
+    LanguageModelError
 } from './types-impl';
 import { AuthenticationExtImpl } from './authentication-ext';
 import { SymbolKind } from '../common/plugin-api-rpc-model';
@@ -469,7 +483,7 @@ export function createAPIFactory(
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             showQuickPick(items: any, options?: theia.QuickPickOptions, token?: theia.CancellationToken): any {
-                return quickOpenExt.showQuickPick(items, options, token);
+                return quickOpenExt.showQuickPick(plugin, items, options, token);
             },
             createQuickPick<T extends theia.QuickPickItem>(): theia.QuickPick<T> {
                 return quickOpenExt.createQuickPick(plugin);
@@ -550,7 +564,7 @@ export function createAPIFactory(
             createTerminal(nameOrOptions: theia.TerminalOptions | theia.ExtensionTerminalOptions | theia.ExtensionTerminalOptions | (string | undefined),
                 shellPath?: string,
                 shellArgs?: string[] | string): theia.Terminal {
-                return terminalExt.createTerminal(nameOrOptions, shellPath, shellArgs);
+                return terminalExt.createTerminal(plugin, nameOrOptions, shellPath, shellArgs);
             },
             onDidChangeTerminalState,
             onDidCloseTerminal,
@@ -1078,6 +1092,14 @@ export function createAPIFactory(
             get onDidChangeBreakpoints(): theia.Event<theia.BreakpointsChangeEvent> {
                 return debugExt.onDidChangeBreakpoints;
             },
+            /** @stubbed */
+            get activeStackItem(): DebugThread | DebugStackFrame | undefined {
+                return undefined;
+            },
+            /** @stubbed */
+            get onDidChangeActiveStackItem(): theia.Event<DebugThread | DebugStackFrame | undefined> {
+                return Event.None;
+            },
             registerDebugAdapterDescriptorFactory(debugType: string, factory: theia.DebugAdapterDescriptorFactory): Disposable {
                 return debugExt.registerDebugAdapterDescriptorFactory(debugType, factory);
             },
@@ -1223,7 +1245,25 @@ export function createAPIFactory(
             /** @stubbed MappedEditsProvider */
             registerMappedEditsProvider(documentSelector: theia.DocumentSelector, provider: theia.MappedEditsProvider): Disposable {
                 return Disposable.NULL;
+            },
+            /** @stubbed ChatRequestHandler */
+            createChatParticipant(id: string, handler: theia.ChatRequestHandler): theia.ChatParticipant {
+                return {
+                    id,
+                    requestHandler: handler,
+                    dispose() {},
+                    onDidReceiveFeedback: (listener, thisArgs?, disposables?) => Event.None(listener, thisArgs, disposables)
+                };
             }
+        };
+
+        const lm: typeof theia.lm = {
+            /** @stubbed LanguageModelChat */
+            selectChatModels(selector?: theia.LanguageModelChatSelector): Thenable<theia.LanguageModelChat[]> {
+                return Promise.resolve([]);
+            },
+            /** @stubbed LanguageModelChat */
+            onDidChangeChatModels: (listener, thisArgs?, disposables?) => Event.None(listener, thisArgs, disposables)
         };
 
         return <typeof theia>{
@@ -1244,6 +1284,7 @@ export function createAPIFactory(
             notebooks,
             l10n,
             tests,
+            lm,
             // Types
             StatusBarAlignment: StatusBarAlignment,
             Disposable: Disposable,
@@ -1341,6 +1382,8 @@ export function createAPIFactory(
             Breakpoint,
             SourceBreakpoint,
             FunctionBreakpoint,
+            DebugStackFrame,
+            DebugThread,
             Color,
             ColorInformation,
             ColorPresentation,
@@ -1426,7 +1469,19 @@ export function createAPIFactory(
             DeclarationCoverage,
             FileCoverage,
             StatementCoverage,
-            TestCoverageCount
+            TestCoverageCount,
+            ChatRequestTurn,
+            ChatResponseTurn,
+            ChatResponseAnchorPart,
+            ChatResponseCommandButtonPart,
+            ChatResponseFileTreePart,
+            ChatResponseMarkdownPart,
+            ChatResponseProgressPart,
+            ChatResponseReferencePart,
+            ChatResultFeedbackKind,
+            LanguageModelChatMessage,
+            LanguageModelChatMessageRole,
+            LanguageModelError
         };
     };
 }
@@ -1508,7 +1563,7 @@ export class PluginExt<T> extends Plugin<T> implements ExtensionPlugin<T> {
 
         this.extensionPath = this.pluginPath;
         this.extensionUri = this.pluginUri;
-        this.extensionKind = ExtensionKind.UI; // stub as a local extension (not running on a remote workspace)
+        this.extensionKind = pluginManager.getPluginKind();
         this.isFromDifferentExtensionHost = isFromDifferentExtensionHost;
     }
 
