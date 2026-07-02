@@ -5,7 +5,7 @@
   "dependencies": {
     "@theia/core": "1.51.0",
     "@theia/filesystem": "1.51.0",
-    "@theia/workspace": "1.51.0",
+    "@theia/workspace": "1.73.1",
     "minimatch": "^5.1.0",
     "tslib": "^2.6.2"
   },
